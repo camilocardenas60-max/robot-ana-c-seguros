@@ -163,7 +163,7 @@
     escuchando: () => `<g class="inclina">${ojosOval(true)}<ellipse cx="200" cy="186" rx="14" ry="12" fill="${O}"/></g>`,
     pensando: () => `<rect x="120" y="66" width="40" height="40" rx="20" fill="${O}"/><rect x="260" y="66" width="40" height="40" rx="20" fill="${O}"/><path d="M180 186 Q204 178 224 190" fill="none" stroke="${O}" stroke-width="10" stroke-linecap="round"/><circle class="pt" cx="318" cy="46" r="7" fill="${AC}"/><circle class="pt" cx="340" cy="34" r="9" fill="${AC}" style="animation-delay:.2s"/><circle class="pt" cx="366" cy="20" r="11" fill="${AC}" style="animation-delay:.4s"/>`,
     sorprendida: () => `<circle cx="130" cy="98" r="30" fill="${O}"/><circle cx="270" cy="98" r="30" fill="${O}"/><ellipse cx="200" cy="190" rx="18" ry="22" fill="${O}"/>`,
-    hablando: () => ojosOval() + `<g class="habla"><path d="M166 172 Q200 172 234 172 Q230 206 200 206 Q170 206 166 172 Z" fill="${O}"/></g>`,
+    hablando: () => ojosOval() + `<path id="boca-viva" d="${trazoBoca(0, 1)}" fill="${O}"/>`,
     dormida: () => `<path d="M108 100 Q130 118 152 100" fill="none" stroke="${O}" stroke-width="12" stroke-linecap="round"/><path d="M248 100 Q270 118 292 100" fill="none" stroke="${O}" stroke-width="12" stroke-linecap="round"/><ellipse cx="200" cy="184" rx="10" ry="7" fill="${O}"/><text class="flota" x="320" y="70" font-size="30" font-weight="500" fill="${AC}">z</text><text class="flota" x="342" y="50" font-size="22" font-weight="500" fill="${AC}" style="animation-delay:.8s">z</text>`,
   };
   const MAPA_CARAS = { dormido: "dormida", reposo: "sonrisa", escuchando: "escuchando", pensando: "pensando", hablando: "hablando",
@@ -206,7 +206,71 @@
     if (audioActual) { const a = audioActual; audioActual = null; a.pause(); }
   }
   let expresionFinal = "feliz";
-  function alTerminar() { if (["hablando", "riendo"].includes(cuerpo.dataset.estado)) { estado(expresionFinal); reposoTras(2200); } }
+  // ---------- Labios sincronizados con la voz ----------
+  // Voz de la nube: se mide el volumen real del audio. Voz de la tablet: se leen las vocales del texto,
+  // y cada vez que el navegador avisa que empieza una palabra, la boca se vuelve a sincronizar.
+  const labios = { o: 0, w: 1, objO: 0, objW: 1, plan: null, analizador: null, datos: null };
+  function trazoBoca(o, w) {
+    const ancho = 18 + 18 * w, alto = 3 + 36 * o, y = 176;
+    return `M${200 - ancho} ${y} Q200 ${y + 4 - 8 * o} ${200 + ancho} ${y} Q${200 + ancho - 4} ${y + alto} 200 ${y + alto} Q${200 - ancho + 4} ${y + alto} ${200 - ancho} ${y} Z`;
+  }
+  function visema(c) {
+    if (!c) return { o: 0, w: 1 };
+    c = c.toLowerCase();
+    if ("aá".includes(c)) return { o: 1, w: 1 };
+    if ("eéiíy".includes(c)) return { o: .55, w: 1.2 };
+    if ("oóuúü".includes(c)) return { o: .75, w: .45 };
+    if ("mbpv".includes(c)) return { o: 0, w: .9 };
+    if (/[\s,.;:!?¡¿…-]/.test(c)) return { o: .04, w: 1 };
+    return { o: .25, w: .95 };
+  }
+  function planDeTexto(texto, velocidad) {
+    const msBase = 1000 / (14.5 * velocidad); // ~14 letras por segundo a velocidad normal
+    const tiempos = []; let t = 0;
+    for (const c of texto) {
+      tiempos.push(t);
+      t += msBase * (/[,;:]/.test(c) ? 4 : /[.!?…]/.test(c) ? 6 : c === " " ? .7 : 1);
+    }
+    return { texto, tiempos, t0: performance.now() };
+  }
+  function cicloLabios() {
+    if (labios.analizador) {
+      labios.analizador.getByteTimeDomainData(labios.datos);
+      let s = 0;
+      for (let i = 0; i < labios.datos.length; i++) { const v = (labios.datos[i] - 128) / 128; s += v * v; }
+      const rms = Math.sqrt(s / labios.datos.length);
+      labios.objO = Math.min(1, Math.max(0, (rms - .015) * 7));
+      labios.objW = .7 + .4 * labios.objO;
+    } else if (labios.plan) {
+      const p = labios.plan, trans = performance.now() - p.t0;
+      let i = 0; while (i < p.tiempos.length - 1 && p.tiempos[i + 1] <= trans) i++;
+      const v = trans > p.tiempos[p.tiempos.length - 1] + 300 ? { o: 0, w: 1 } : visema(p.texto[i]);
+      labios.objO = v.o; labios.objW = v.w;
+    } else { labios.objO = 0; labios.objW = 1; }
+    labios.o += (labios.objO - labios.o) * .45;
+    labios.w += (labios.objW - labios.w) * .35;
+    const boca = document.getElementById("boca-viva");
+    if (boca) boca.setAttribute("d", trazoBoca(labios.o, labios.w));
+    requestAnimationFrame(cicloLabios);
+  }
+  requestAnimationFrame(cicloLabios);
+
+  let ctxAudio = null;
+  function conectarAnalizador(a) {
+    try {
+      ctxAudio = ctxAudio || new (window.AudioContext || window.webkitAudioContext)();
+      if (ctxAudio.state === "suspended") ctxAudio.resume();
+      const fuente = ctxAudio.createMediaElementSource(a);
+      const an = ctxAudio.createAnalyser();
+      an.fftSize = 1024;
+      fuente.connect(an); an.connect(ctxAudio.destination);
+      labios.analizador = an; labios.datos = new Uint8Array(an.fftSize);
+    } catch { labios.analizador = null; }
+  }
+  function soltarLabios() { labios.plan = null; labios.analizador = null; }
+
+  function alTerminar() {
+    soltarLabios(); if (["hablando", "riendo"].includes(cuerpo.dataset.estado)) { estado(expresionFinal); reposoTras(2200); } }
   const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
   async function decir(t, expresion) {
@@ -227,6 +291,7 @@
         if (r.ok) {
           const url = URL.createObjectURL(await r.blob());
           const a = new Audio(url);
+          conectarAnalizador(a);
           audioActual = a;
           const sono = await new Promise((resolver) => {
             a.onplay = () => estado(caraHablando);
@@ -258,7 +323,11 @@
         u.lang = voz ? voz.lang : "es-CO";
         if (voz) u.voice = voz;
         u.rate = velocidad; u.pitch = tono;
-        if (i === 0) u.onstart = () => estado(caraHablando);
+        u.onstart = () => { if (i === 0) estado(caraHablando); labios.plan = planDeTexto(trozo, velocidad); };
+        u.onboundary = (e) => {
+          const p = labios.plan;
+          if (p && p.texto === trozo && typeof e.charIndex === "number" && p.tiempos[e.charIndex] != null) p.t0 = performance.now() - p.tiempos[e.charIndex];
+        };
         if (i === lotes.length - 1) u.onend = () => { alTerminar(); resolver(); };
         u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") console.warn("Voz:", e.error); alTerminar(); resolver(); };
         speechSynthesis.speak(u);
