@@ -1,0 +1,8 @@
+{
+  "name": "robot-ana-c-seguros",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Robot asistente de Ana C de Seguros: cara, voz y agente Claude",
+  "engines": { "node": "22.x" }
+}

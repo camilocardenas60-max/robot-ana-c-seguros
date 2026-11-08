@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#123E86">
+<title>Robot Ana C de Seguros</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --placa: #123E86;      /* azul de la cara */
+    --placa-borde: #0D2F69;
+    --hielo: #DDF1FF;      /* ojos */
+    --cielo: #5DB2F2;      /* acentos, boca */
+    --niebla: #A9CBEE;     /* texto secundario */
+    --alerta: #FFC66B;
+    --u: min(1vw, 1.6vh);  /* unidad que escala con la tablet */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--placa); color: var(--hielo); overflow: hidden;
+    font-family: "Fredoka", "Nunito", system-ui, sans-serif; -webkit-tap-highlight-color: transparent;
+    user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  body { padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0); }
+
+  /* ---------- Cara ---------- */
+  #cara { position: fixed; inset: 0; display: grid; place-items: center; cursor: pointer;
+    background: radial-gradient(ellipse 70% 60% at 50% 42%, #1A4E9F 0%, var(--placa) 60%, var(--placa-borde) 100%); }
+  .rostro { position: relative; width: calc(var(--u) * 70); height: calc(var(--u) * 30); margin-top: calc(var(--u) * -14); }
+  .ojos { position: absolute; top: 0; left: 50%; display: flex; gap: calc(var(--u) * 20);
+    transform: translateX(calc(-50% + var(--mirar-x, 0) * var(--u) * 4)) translateY(calc(var(--mirar-y, 0) * var(--u) * 3));
+    transition: transform .35s ease-out; }
+  .ojo { width: calc(var(--u) * 13); height: calc(var(--u) * 18); border-radius: calc(var(--u) * 7);
+    background: var(--hielo); box-shadow: 0 0 calc(var(--u) * 4) rgba(150, 210, 255, .55);
+    transform-origin: center; transition: height .25s ease, border-radius .25s ease, transform .12s ease; }
+  .parpadeo .ojo { transform: scaleY(.08); }
+  .boca { position: absolute; left: 50%; bottom: 0; width: calc(var(--u) * 12); height: calc(var(--u) * 2.4);
+    transform: translateX(-50%); border-radius: calc(var(--u) * 2); background: var(--cielo);
+    transition: width .3s ease, height .2s ease, border-radius .3s ease; }
+
+  /* Estados */
+  body[data-estado="dormido"] .ojo { height: calc(var(--u) * 2.5); }
+  body[data-estado="escuchando"] .ojo { height: calc(var(--u) * 21); }
+  body[data-estado="escuchando"] .boca { width: calc(var(--u) * 6); height: calc(var(--u) * 6); border-radius: 50%; }
+  body[data-estado="pensando"] .ojos { --mirar-y: -1; }
+  body[data-estado="pensando"] .ojo { height: calc(var(--u) * 11); }
+  body[data-estado="pensando"] .boca { width: calc(var(--u) * 8); }
+  body[data-estado="hablando"] .boca { animation: hablar .22s ease-in-out infinite alternate; }
+  body[data-estado="feliz"] .ojo { height: calc(var(--u) * 9); border-radius: calc(var(--u) * 7) calc(var(--u) * 7) calc(var(--u) * 2) calc(var(--u) * 2); }
+  body[data-estado="feliz"] .boca { width: calc(var(--u) * 16); height: calc(var(--u) * 5); border-radius: 0 0 calc(var(--u) * 8) calc(var(--u) * 8); }
+  @keyframes hablar { from { height: calc(var(--u) * 2); width: calc(var(--u) * 12); }
+                      to   { height: calc(var(--u) * 7); width: calc(var(--u) * 9); border-radius: calc(var(--u) * 4); } }
+
+  /* Anillo de escucha */
+  .anillo { position: absolute; inset: calc(var(--u) * -8) calc(var(--u) * -6); border-radius: calc(var(--u) * 14);
+    border: calc(var(--u) * .5) solid var(--cielo); opacity: 0; transition: opacity .3s; pointer-events: none; }
+  body[data-estado="escuchando"] .anillo { opacity: .8; animation: latido 1.2s ease-in-out infinite; }
+  @keyframes latido { 50% { transform: scale(1.03); opacity: .35; } }
+
+  /* Subtítulo */
+  #subtitulo { position: fixed; left: 50%; bottom: calc(var(--u) * 4); transform: translateX(-50%);
+    width: min(80vw, 60ch); text-align: center; font-size: calc(var(--u) * 3.4); line-height: 1.35;
+    font-weight: 500; color: var(--hielo); min-height: 2.7em; pointer-events: none; }
+  #subtitulo.tenue { color: var(--niebla); font-weight: 400; }
+  #subtitulo.error { color: var(--alerta); }
+
+  /* Controles discretos */
+  .controles { position: fixed; top: calc(var(--u) * 2.5 + env(safe-area-inset-top, 0)); right: calc(var(--u) * 2.5);
+    display: flex; gap: calc(var(--u) * 1.5); opacity: .35; transition: opacity .3s; }
+  .controles:hover, .controles:focus-within { opacity: 1; }
+  .controles button { font: inherit; font-size: calc(var(--u) * 2); color: var(--hielo); background: transparent;
+    border: 2px solid var(--niebla); border-radius: 999px; padding: calc(var(--u) * .8) calc(var(--u) * 2); cursor: pointer; }
+  .controles button[aria-pressed="true"] { background: var(--cielo); border-color: var(--cielo); color: var(--placa-borde); }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--alerta); outline-offset: 3px; }
+
+  /* ---------- Pantalla de PIN ---------- */
+  #pantalla-pin { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; background: var(--placa); }
+  #pantalla-pin[hidden] { display: none; }
+  .tarjeta-pin { display: grid; gap: calc(var(--u) * 2.5); justify-items: center; text-align: center; width: min(90vw, 34ch); }
+  .tarjeta-pin h1 { font-size: calc(var(--u) * 4.5); font-weight: 600; line-height: 1.15; }
+  .tarjeta-pin p { color: var(--niebla); font-size: calc(var(--u) * 2.4); line-height: 1.4; }
+  .tarjeta-pin input { width: 100%; font: inherit; font-size: calc(var(--u) * 4); text-align: center; letter-spacing: .3em;
+    padding: calc(var(--u) * 1.5); border-radius: calc(var(--u) * 2); border: 3px solid var(--niebla);
+    background: var(--placa-borde); color: var(--hielo); }
+  .tarjeta-pin button { width: 100%; font: inherit; font-size: calc(var(--u) * 3); font-weight: 600; cursor: pointer;
+    padding: calc(var(--u) * 1.6); border: 0; border-radius: calc(var(--u) * 2); background: var(--cielo); color: var(--placa-borde); }
+  #error-pin { color: var(--alerta); min-height: 1.4em; font-size: calc(var(--u) * 2.4); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  }
+</style>
+</head>
+<body data-estado="dormido">
+
+<main id="cara" aria-label="Cara del robot. Toca para hablar.">
+  <div class="rostro" id="rostro">
+    <div class="anillo"></div>
+    <div class="ojos"><div class="ojo"></div><div class="ojo"></div></div>
+    <div class="boca"></div>
+  </div>
+</main>
+
+<p id="subtitulo" class="tenue" aria-live="polite">Toca mi cara para hablar</p>
+
+<div class="controles">
+  <button id="btn-camara" type="button" aria-pressed="false">Cámara</button>
+  <button id="btn-pantalla" type="button">Pantalla completa</button>
+</div>
+
+<section id="pantalla-pin" hidden>
+  <form class="tarjeta-pin" id="form-pin" autocomplete="off">
+    <h1>Robot de Ana C de Seguros</h1>
+    <p>Escribe el PIN para activarlo. Solo se pide una vez en esta tablet.</p>
+    <input id="input-pin" type="password" inputmode="numeric" aria-label="PIN" required>
+    <button type="submit">Activar robot</button>
+    <div id="error-pin" role="alert"></div>
+  </form>
+</section>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---------- Configuración ----------
+  const SALUDO_INICIAL = "¡Hola! Soy el asistente de Ana C de Seguros. Toca mi cara cuando me necesites.";
+  const SALUDO_PRESENCIA = "¡Hola! Si necesitas algo, toca mi cara.";
+  const MINUTOS_REINICIO = 3;        // olvida la conversación tras este tiempo sin uso
+  const SEGUNDOS_ENTRE_SALUDOS = 120; // no saludar por movimiento más seguido que esto
+
+  const $ = (id) => document.getElementById(id);
+  const cuerpo = document.body;
+  const subtitulo = $("subtitulo");
+  const ojos = document.querySelector(".ojos");
+
+  let pin = "";
+  try { pin = localStorage.getItem("robotPin") || ""; } catch {}
+  let historial = [];
+  let ultimoUso = Date.now();
+  let reconocedor = null;
+  let ultimoSaludo = 0;
+  let activo = false;
+
+  // ---------- Estados y subtítulos ----------
+  function estado(e) { cuerpo.dataset.estado = e; }
+  function texto(t, tipo = "") { subtitulo.textContent = t; subtitulo.className = tipo; }
+  function reposo() { estado("reposo"); texto("Toca mi cara para hablar", "tenue"); }
+
+  // ---------- Parpadeo y mirada ----------
+  function programarParpadeo() {
+    setTimeout(() => {
+      cuerpo.classList.add("parpadeo");
+      setTimeout(() => cuerpo.classList.remove("parpadeo"), 140);
+      programarParpadeo();
+    }, 2500 + Math.random() * 4000);
+  }
+  function mirar(x, y = 0) {
+    ojos.style.setProperty("--mirar-x", Math.max(-1, Math.min(1, x)).toFixed(2));
+    if (cuerpo.dataset.estado !== "pensando") ojos.style.setProperty("--mirar-y", y.toFixed(2));
+  }
+  // Mirada errante cuando no hay cámara
+  setInterval(() => { if (!camaraActiva && cuerpo.dataset.estado === "reposo") mirar(Math.random() * 1.6 - .8, Math.random() * .6 - .3); }, 4000);
+
+  // ---------- Voz (texto a voz) ----------
+  let voz = null;
+  function elegirVoz() {
+    const voces = speechSynthesis.getVoices();
+    voz = voces.find(v => v.lang === "es-CO") || voces.find(v => v.lang === "es-US") ||
+          voces.find(v => v.lang === "es-MX") || voces.find(v => v.lang && v.lang.startsWith("es")) || null;
+  }
+  if ("speechSynthesis" in window) { elegirVoz(); speechSynthesis.onvoiceschanged = elegirVoz; }
+
+  function decir(t) {
+    return new Promise((resolver) => {
+      texto(t);
+      if (!("speechSynthesis" in window)) { reposoTras(4000); return resolver(); }
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance(t);
+      u.lang = voz ? voz.lang : "es-CO";
+      if (voz) u.voice = voz;
+      u.rate = 1.02; u.pitch = 1.15;
+      u.onstart = () => estado("hablando");
+      u.onend = u.onerror = () => { if (cuerpo.dataset.estado === "hablando") { estado("feliz"); reposoTras(1500); } resolver(); };
+      speechSynthesis.speak(u);
+    });
+  }
+  let temporizadorReposo;
+  function reposoTras(ms) { clearTimeout(temporizadorReposo); temporizadorReposo = setTimeout(() => { if (["feliz", "hablando"].includes(cuerpo.dataset.estado)) reposo(); }, ms); }
+
+  // ---------- Escuchar (voz a texto) ----------
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+  function escuchar() {
+    if (!SR) { texto("Este navegador no reconoce voz. Abre el robot en Google Chrome.", "error"); return; }
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    clearTimeout(temporizadorReposo);
+
+    reconocedor = new SR();
+    reconocedor.lang = "es-CO";
+    reconocedor.interimResults = true;
+    reconocedor.continuous = false;
+    let final = "";
+
+    reconocedor.onstart = () => { estado("escuchando"); texto("Te escucho…", "tenue"); };
+    reconocedor.onresult = (e) => {
+      let parcial = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t; else parcial += t;
+      }
+      texto((final + parcial).trim() || "Te escucho…", final ? "" : "tenue");
+    };
+    reconocedor.onerror = (e) => {
+      if (e.error === "not-allowed" || e.error === "service-not-allowed") texto("El micrófono está bloqueado. Permítelo en los ajustes del navegador.", "error");
+      else if (e.error === "no-speech") texto("No escuché nada. Toca mi cara e inténtalo otra vez.", "tenue");
+      else if (e.error === "network") texto("Sin conexión para reconocer la voz. Revisa el wifi.", "error");
+    };
+    reconocedor.onend = () => {
+      reconocedor = null;
+      const pregunta = final.trim();
+      if (pregunta) preguntar(pregunta);
+      else if (cuerpo.dataset.estado === "escuchando") estado("reposo");
+    };
+    try { reconocedor.start(); } catch { reconocedor = null; }
+  }
+
+  // ---------- Agente Claude ----------
+  async function preguntar(p) {
+    if (Date.now() - ultimoUso > MINUTOS_REINICIO * 60000) historial = [];
+    ultimoUso = Date.now();
+    historial.push({ role: "user", content: p });
+    estado("pensando");
+    texto(p);
+
+    try {
+      const r = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-robot-pin": pin },
+        body: JSON.stringify({ messages: historial.slice(-12) })
+      });
+      const datos = await r.json().catch(() => ({}));
+      if (r.status === 401) { historial.pop(); pedirPin("El PIN ya no es válido. Escríbelo de nuevo."); return; }
+      if (!r.ok) {
+        historial.pop();
+        if (datos.codigo === "config") { estado("reposo"); texto("Falta configurar el robot en Vercel (llave o PIN).", "error"); return; }
+        await decir("Tuve un problema para conectarme. Intenta de nuevo en un momento.");
+        return;
+      }
+      historial.push({ role: "assistant", content: datos.reply });
+      ultimoUso = Date.now();
+      await decir(datos.reply);
+    } catch {
+      historial.pop();
+      estado("reposo");
+      texto("Sin conexión a internet. Revisa el wifi de la tablet.", "error");
+    }
+  }
+
+  // ---------- Toque en la cara ----------
+  $("cara").addEventListener("click", () => {
+    if (!activo) return;
+    const e = cuerpo.dataset.estado;
+    if (e === "escuchando" && reconocedor) { reconocedor.stop(); return; }
+    if (e === "pensando") return;
+    escuchar(); // si está hablando, lo interrumpe y escucha
+  });
+
+  // ---------- Cámara: detecta movimiento y sigue con la mirada ----------
+  let camaraActiva = false, flujo = null, bucle = null;
+  const video = document.createElement("video");
+  video.muted = true; video.playsInline = true;
+  const lienzo = document.createElement("canvas");
+  const AN = 32, AL = 24;
+  lienzo.width = AN; lienzo.height = AL;
+  const ctx = lienzo.getContext("2d", { willReadFrequently: true });
+  let anterior = null, quietoDesde = Date.now();
+
+  async function encenderCamara() {
+    try {
+      flujo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 320, height: 240 }, audio: false });
+      video.srcObject = flujo;
+      await video.play();
+      camaraActiva = true;
+      $("btn-camara").setAttribute("aria-pressed", "true");
+      try { localStorage.setItem("robotCamara", "1"); } catch {}
+      bucle = setInterval(analizar, 200);
+    } catch {
+      texto("No pude usar la cámara. Revisa el permiso del navegador.", "error");
+    }
+  }
+  function apagarCamara() {
+    clearInterval(bucle);
+    if (flujo) flujo.getTracks().forEach(t => t.stop());
+    flujo = null; anterior = null; camaraActiva = false;
+    $("btn-camara").setAttribute("aria-pressed", "false");
+    try { localStorage.setItem("robotCamara", "0"); } catch {}
+  }
+  function analizar() {
+    if (video.readyState < 2) return;
+    ctx.drawImage(video, 0, 0, AN, AL);
+    const px = ctx.getImageData(0, 0, AN, AL).data;
+    const gris = new Uint8Array(AN * AL);
+    for (let i = 0; i < gris.length; i++) gris[i] = (px[i * 4] * 3 + px[i * 4 + 1] * 6 + px[i * 4 + 2]) / 10;
+    if (anterior) {
+      let cambios = 0, sumaX = 0, sumaY = 0;
+      for (let i = 0; i < gris.length; i++) {
+        if (Math.abs(gris[i] - anterior[i]) > 28) { cambios++; sumaX += i % AN; sumaY += (i / AN) | 0; }
+      }
+      if (cambios > gris.length * 0.04) {
+        // La cámara frontal se ve en espejo: invertimos X para que mire hacia la persona
+        const x = -((sumaX / cambios) / (AN - 1) * 2 - 1);
+        const y = (sumaY / cambios) / (AL - 1) * 2 - 1;
+        if (cuerpo.dataset.estado === "reposo") mirar(x, y * .6);
+        const llegoAlguien = Date.now() - quietoDesde > 15000;
+        if (llegoAlguien && cuerpo.dataset.estado === "reposo" && Date.now() - ultimoSaludo > SEGUNDOS_ENTRE_SALUDOS * 1000) {
+          ultimoSaludo = Date.now();
+          decir(SALUDO_PRESENCIA);
+        }
+        quietoDesde = Date.now();
+      }
+    }
+    anterior = gris;
+  }
+  $("btn-camara").addEventListener("click", (e) => { e.stopPropagation(); camaraActiva ? apagarCamara() : encenderCamara(); });
+
+  // ---------- Pantalla completa y pantalla siempre encendida ----------
+  $("btn-pantalla").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.().then(() => screen.orientation?.lock?.("landscape").catch(() => {})).catch(() => {});
+  });
+  let bloqueo = null;
+  async function mantenerEncendida() {
+    try { if ("wakeLock" in navigator && document.visibilityState === "visible") bloqueo = await navigator.wakeLock.request("screen"); } catch {}
+  }
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") mantenerEncendida(); });
+
+  // ---------- PIN y arranque ----------
+  function pedirPin(mensaje = "") {
+    activo = false;
+    estado("dormido");
+    $("error-pin").textContent = mensaje;
+    $("pantalla-pin").hidden = false;
+    $("input-pin").value = "";
+    setTimeout(() => $("input-pin").focus(), 50);
+  }
+  $("form-pin").addEventListener("submit", (e) => {
+    e.preventDefault();
+    pin = $("input-pin").value.trim();
+    if (!pin) return;
+    try { localStorage.setItem("robotPin", pin); } catch {}
+    $("pantalla-pin").hidden = true;
+    despertar();
+  });
+
+  let primeraVez = true;
+  async function despertar() {
+    activo = true;
+    mantenerEncendida();
+    let usarCamara = true;
+    try { usarCamara = localStorage.getItem("robotCamara") !== "0"; } catch {}
+    if (usarCamara && !camaraActiva) encenderCamara();
+    reposo();
+    if (primeraVez) { primeraVez = false; ultimoSaludo = Date.now(); decir(SALUDO_INICIAL); }
+  }
+
+  programarParpadeo();
+  if (pin) {
+    // Los navegadores exigen un toque antes de hablar: el primer toque despierta al robot
+    estado("dormido");
+    texto("Toca la pantalla para despertarme", "tenue");
+    $("cara").addEventListener("click", function primerToque() {
+      $("cara").removeEventListener("click", primerToque);
+      despertar();
+    });
+  } else {
+    pedirPin();
+  }
+})();
+</script>
+</body>
+</html>

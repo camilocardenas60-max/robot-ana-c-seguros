@@ -1,0 +1,10 @@
+{
+  "name": "Robot Ana C de Seguros",
+  "short_name": "Robot Ana C",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "landscape",
+  "background_color": "#123E86",
+  "theme_color": "#123E86",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
