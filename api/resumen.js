@@ -16,7 +16,7 @@ function armarCorreo(r, meta) {
     ${h("Decisiones")}${lista(r.decisiones, esc)}
     ${h("Tareas")}${lista(r.tareas, (t) => `<b>${esc(t.responsable || "Sin asignar")}:</b> ${esc(t.tarea)}${t.fecha ? ` <span style="color:#5b6b85">(${esc(t.fecha)})</span>` : ""}`)}
     ${h("Pendientes")}${lista(r.pendientes, esc)}
-    <p style="color:#5b6b85;font-size:13px;margin-top:24px">La transcripción completa va adjunta. Resumen generado por el robot de Ana C de Seguros; revisa los datos importantes antes de actuar.</p>
+    <p style="color:#5b6b85;font-size:13px;margin-top:24px">La transcripción completa va adjunta. Resumen generado por Valery, la asistente de Ana C de Seguros; revisa los datos importantes antes de actuar.</p>
   </div>`;
 }
 
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         model: process.env.CLAUDE_MODEL_RESUMEN || "claude-sonnet-5-5",
         max_tokens: 2000,
-        system: `Resumes reuniones de Ana C de Seguros, una agencia de seguros en Colombia. La transcripción es automática: puede tener errores y las personas aparecen como "Persona 0", "Persona 1"; si el contexto revela el nombre de alguien, úsalo. No inventes nada que no se haya dicho. Responde SOLO con JSON válido, sin texto adicional ni bloques de código, con esta forma:
+        system: `Resumes reuniones de Ana C de Seguros, una agencia de seguros en Colombia cuya dueña es Ana Carolina (Caro), corredora de seguros. La transcripción es automática: puede tener errores y las personas aparecen como "Persona 0", "Persona 1"; si el contexto revela el nombre de alguien, úsalo. No inventes nada que no se haya dicho. Responde SOLO con JSON válido, sin texto adicional ni bloques de código, con esta forma:
 {"titulo": "tema principal en pocas palabras", "resumen": "3 a 5 frases", "decisiones": ["..."], "tareas": [{"responsable": "...", "tarea": "...", "fecha": "fecha o plazo si se mencionó, si no vacío"}], "pendientes": ["temas sin cerrar o dudas"]}`,
         messages: [{ role: "user", content: `Fecha: ${meta.fecha}\nDuración: ${meta.duracion}\n\nTranscripción:\n${transcripcion.slice(0, 400000)}` }],
       }),
@@ -65,7 +65,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${RESEND_API_KEY}` },
       body: JSON.stringify({
-        from: process.env.RESEND_FROM || "Robot Ana C <onboarding@resend.dev>",
+        from: process.env.RESEND_FROM || "Valery · Ana C <onboarding@resend.dev>",
         to: RESUMEN_EMAIL.split(",").map((s) => s.trim()).filter(Boolean),
         subject: `Resumen: ${r.titulo || "reunión"} (${meta.fecha})`,
         html: armarCorreo(r, meta),

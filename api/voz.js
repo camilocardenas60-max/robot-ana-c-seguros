@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
   let cuerpo = req.body;
   if (typeof cuerpo === "string") { try { cuerpo = JSON.parse(cuerpo || "{}"); } catch { cuerpo = {}; } }
-  const texto = typeof cuerpo?.text === "string" ? cuerpo.text.trim().slice(0, 600) : "";
+  const texto = typeof cuerpo?.text === "string" ? cuerpo.text.trim().slice(0, 2500) : "";
   if (!texto) return res.status(400).json({ error: "No llegó texto." });
 
   try {

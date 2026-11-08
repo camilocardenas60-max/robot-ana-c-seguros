@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#123E86">
-<title>Robot Ana C de Seguros</title>
+<title>Valery · Ana C de Seguros</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -26,36 +26,28 @@
     user-select: none; -webkit-user-select: none; touch-action: manipulation; }
   body { padding: env(safe-area-inset-top, 0) env(safe-area-inset-right, 0) env(safe-area-inset-bottom, 0) env(safe-area-inset-left, 0); }
 
-  /* ---------- Cara ---------- */
+  /* ---------- Cara (SVG con expresiones) ---------- */
   #cara { position: fixed; inset: 0; display: grid; place-items: center; cursor: pointer;
     background: radial-gradient(ellipse 70% 60% at 50% 42%, #1A4E9F 0%, var(--placa) 60%, var(--placa-borde) 100%); }
-  .rostro { position: relative; width: calc(var(--u) * 70); height: calc(var(--u) * 30); margin-top: calc(var(--u) * -14); }
-  .ojos { position: absolute; top: 0; left: 50%; display: flex; gap: calc(var(--u) * 20);
-    transform: translateX(calc(-50% + var(--mirar-x, 0) * var(--u) * 4)) translateY(calc(var(--mirar-y, 0) * var(--u) * 3));
-    transition: transform .35s ease-out; }
-  .ojo { width: calc(var(--u) * 13); height: calc(var(--u) * 18); border-radius: calc(var(--u) * 7);
-    background: var(--hielo); box-shadow: 0 0 calc(var(--u) * 4) rgba(150, 210, 255, .55);
-    transform-origin: center; transition: height .25s ease, border-radius .25s ease, transform .12s ease; }
-  .parpadeo .ojo { transform: scaleY(.08); }
-  .boca { position: absolute; left: 50%; bottom: 0; width: calc(var(--u) * 12); height: calc(var(--u) * 2.4);
-    transform: translateX(-50%); border-radius: calc(var(--u) * 2); background: var(--cielo);
-    transition: width .3s ease, height .2s ease, border-radius .3s ease; }
-
-  /* Estados */
-  body[data-estado="dormido"] .ojo { height: calc(var(--u) * 2.5); }
-  body[data-estado="escuchando"] .ojo { height: calc(var(--u) * 21); }
-  body[data-estado="escuchando"] .boca { width: calc(var(--u) * 6); height: calc(var(--u) * 6); border-radius: 50%; }
-  body[data-estado="pensando"] .ojos { --mirar-y: -1; }
-  body[data-estado="pensando"] .ojo { height: calc(var(--u) * 11); }
-  body[data-estado="pensando"] .boca { width: calc(var(--u) * 8); }
-  body[data-estado="hablando"] .boca { animation: hablar .22s ease-in-out infinite alternate; }
-  body[data-estado="feliz"] .ojo { height: calc(var(--u) * 9); border-radius: calc(var(--u) * 7) calc(var(--u) * 7) calc(var(--u) * 2) calc(var(--u) * 2); }
-  body[data-estado="feliz"] .boca { width: calc(var(--u) * 16); height: calc(var(--u) * 5); border-radius: 0 0 calc(var(--u) * 8) calc(var(--u) * 8); }
-  @keyframes hablar { from { height: calc(var(--u) * 2); width: calc(var(--u) * 12); }
-                      to   { height: calc(var(--u) * 7); width: calc(var(--u) * 9); border-radius: calc(var(--u) * 4); } }
+  .rostro { position: relative; width: calc(var(--u) * 72); margin-top: calc(var(--u) * -16); }
+  .svg-cara { width: 100%; height: auto; display: block; overflow: visible; }
+  #mirada { transition: transform .35s ease-out; }
+  .parpadea { animation: parp 4.2s infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes parp { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+  .rebota { animation: reb .5s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center; }
+  @keyframes reb { to { transform: translateY(-8px); } }
+  .flota { animation: flo 2.4s ease-in-out infinite; }
+  @keyframes flo { 0% { opacity: 0; transform: translateY(10px); } 40% { opacity: 1; } 100% { opacity: 0; transform: translateY(-30px); } }
+  .habla { animation: hab .22s ease-in-out infinite alternate; transform-box: fill-box; transform-origin: center top; }
+  @keyframes hab { to { transform: scaleY(.35); } }
+  .late { animation: lat 1s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+  @keyframes lat { 50% { transform: scale(1.15); } }
+  .pt { animation: pt 1.2s infinite; }
+  @keyframes pt { 0%, 100% { opacity: .2; } 50% { opacity: 1; } }
+  .inclina { transform: rotate(-6deg); transform-origin: 200px 130px; }
 
   /* Anillo de escucha */
-  .anillo { position: absolute; inset: calc(var(--u) * -8) calc(var(--u) * -6); border-radius: calc(var(--u) * 14);
+  .anillo { position: absolute; inset: calc(var(--u) * -4) calc(var(--u) * -2); border-radius: calc(var(--u) * 14);
     border: calc(var(--u) * .5) solid var(--cielo); opacity: 0; transition: opacity .3s; pointer-events: none; }
   body[data-estado="escuchando"] .anillo { opacity: .8; animation: latido 1.2s ease-in-out infinite; }
   @keyframes latido { 50% { transform: scale(1.03); opacity: .35; } }
@@ -107,11 +99,10 @@
 </head>
 <body data-estado="dormido">
 
-<main id="cara" aria-label="Cara del robot. Toca para hablar.">
-  <div class="rostro" id="rostro">
+<main id="cara" aria-label="Cara de Valery. Toca para hablar.">
+  <div class="rostro">
     <div class="anillo"></div>
-    <div class="ojos"><div class="ojo"></div><div class="ojo"></div></div>
-    <div class="boca"></div>
+    <svg class="svg-cara" viewBox="0 0 400 260" aria-hidden="true"><g id="mirada"><g id="rostro"></g></g></svg>
   </div>
 </main>
 
@@ -127,8 +118,8 @@
 
 <section id="pantalla-pin" hidden>
   <form class="tarjeta-pin" id="form-pin" autocomplete="off">
-    <h1>Robot de Ana C de Seguros</h1>
-    <p>Escribe el PIN para activarlo. Solo se pide una vez en esta tablet.</p>
+    <h1>Valery · Ana C de Seguros</h1>
+    <p>Escribe el PIN para activarla. Solo se pide una vez en esta tablet.</p>
     <input id="input-pin" type="password" inputmode="numeric" aria-label="PIN" required>
     <button type="submit">Activar robot</button>
     <div id="error-pin" role="alert"></div>
@@ -140,15 +131,14 @@
   "use strict";
 
   // ---------- Configuración ----------
-  const SALUDO_INICIAL = "¡Hola! Soy el asistente de Ana C de Seguros. Toca mi cara cuando me necesites.";
+  const SALUDO_INICIAL = "¡Hola! Soy Valery, la asistente de Ana Carolina, corredora de seguros. Toca mi cara cuando me necesites.";
   const SALUDO_PRESENCIA = "¡Hola! Si necesitas algo, toca mi cara.";
-  const MINUTOS_REINICIO = 3;        // olvida la conversación tras este tiempo sin uso
+  const MINUTOS_REINICIO = 10;        // olvida la conversación tras este tiempo sin uso
   const SEGUNDOS_ENTRE_SALUDOS = 120; // no saludar por movimiento más seguido que esto
 
   const $ = (id) => document.getElementById(id);
   const cuerpo = document.body;
   const subtitulo = $("subtitulo");
-  const ojos = document.querySelector(".ojos");
 
   let pin = "";
   try { pin = localStorage.getItem("robotPin") || ""; } catch {}
@@ -159,21 +149,39 @@
   let activo = false;
 
   // ---------- Estados y subtítulos ----------
-  function estado(e) { cuerpo.dataset.estado = e; }
+  // ---------- Expresiones de la cara ----------
+  const O = "#DDF1FF", AC = "#5DB2F2";
+  const ojosOval = (g) => { const h = g ? 62 : 52, w = g ? 46 : 40; return `<g class="parpadea"><rect x="${130 - w / 2}" y="70" width="${w}" height="${h}" rx="${w / 2}" fill="${O}"/><rect x="${270 - w / 2}" y="70" width="${w}" height="${h}" rx="${w / 2}" fill="${O}"/></g>`; };
+  const ojosArco = () => `<path d="M106 112 Q130 76 154 112" fill="none" stroke="${O}" stroke-width="14" stroke-linecap="round"/><path d="M246 112 Q270 76 294 112" fill="none" stroke="${O}" stroke-width="14" stroke-linecap="round"/>`;
+  const corazon = (x, y, s) => `<path class="late" d="M${x} ${y + 12 * s} C${x - 30 * s} ${y - 12 * s} ${x - 16 * s} ${y - 34 * s} ${x} ${y - 18 * s} C${x + 16 * s} ${y - 34 * s} ${x + 30 * s} ${y - 12 * s} ${x} ${y + 12 * s} Z" fill="${O}"/>`;
+  const CARAS = {
+    sonrisa: () => ojosOval() + `<path d="M168 178 Q200 206 232 178" fill="none" stroke="${O}" stroke-width="10" stroke-linecap="round"/>`,
+    feliz: () => ojosArco() + `<path d="M160 168 Q200 168 240 168 Q236 214 200 214 Q164 214 160 168 Z" fill="${O}"/>`,
+    guino: () => `<g class="parpadea"><rect x="110" y="70" width="40" height="52" rx="20" fill="${O}"/></g><path d="M248 104 Q270 84 292 104" fill="none" stroke="${O}" stroke-width="14" stroke-linecap="round"/><path d="M170 180 Q206 204 236 172" fill="none" stroke="${O}" stroke-width="10" stroke-linecap="round"/>`,
+    enamorada: () => corazon(130, 100, 1.3) + corazon(270, 100, 1.3) + `<path d="M172 178 Q200 202 228 178" fill="none" stroke="${O}" stroke-width="10" stroke-linecap="round"/>`,
+    riendo: () => `<g class="rebota"><path d="M108 82 L150 100 L108 118" fill="none" stroke="${O}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><path d="M292 82 L250 100 L292 118" fill="none" stroke="${O}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/><path d="M154 160 Q200 160 246 160 Q240 222 200 222 Q160 222 154 160 Z" fill="${O}"/></g>`,
+    escuchando: () => `<g class="inclina">${ojosOval(true)}<ellipse cx="200" cy="186" rx="14" ry="12" fill="${O}"/></g>`,
+    pensando: () => `<rect x="120" y="66" width="40" height="40" rx="20" fill="${O}"/><rect x="260" y="66" width="40" height="40" rx="20" fill="${O}"/><path d="M180 186 Q204 178 224 190" fill="none" stroke="${O}" stroke-width="10" stroke-linecap="round"/><circle class="pt" cx="318" cy="46" r="7" fill="${AC}"/><circle class="pt" cx="340" cy="34" r="9" fill="${AC}" style="animation-delay:.2s"/><circle class="pt" cx="366" cy="20" r="11" fill="${AC}" style="animation-delay:.4s"/>`,
+    sorprendida: () => `<circle cx="130" cy="98" r="30" fill="${O}"/><circle cx="270" cy="98" r="30" fill="${O}"/><ellipse cx="200" cy="190" rx="18" ry="22" fill="${O}"/>`,
+    hablando: () => ojosOval() + `<g class="habla"><path d="M166 172 Q200 172 234 172 Q230 206 200 206 Q170 206 166 172 Z" fill="${O}"/></g>`,
+    dormida: () => `<path d="M108 100 Q130 118 152 100" fill="none" stroke="${O}" stroke-width="12" stroke-linecap="round"/><path d="M248 100 Q270 118 292 100" fill="none" stroke="${O}" stroke-width="12" stroke-linecap="round"/><ellipse cx="200" cy="184" rx="10" ry="7" fill="${O}"/><text class="flota" x="320" y="70" font-size="30" font-weight="500" fill="${AC}">z</text><text class="flota" x="342" y="50" font-size="22" font-weight="500" fill="${AC}" style="animation-delay:.8s">z</text>`,
+  };
+  const MAPA_CARAS = { dormido: "dormida", reposo: "sonrisa", escuchando: "escuchando", pensando: "pensando", hablando: "hablando",
+    feliz: "feliz", guino: "guino", enamorada: "enamorada", riendo: "riendo", sorprendida: "sorprendida" };
+  const EMOCIONES = ["feliz", "guino", "enamorada", "riendo", "sorprendida"];
+  let caraActual = "";
+  function estado(e) {
+    cuerpo.dataset.estado = e;
+    const k = MAPA_CARAS[e] || "sonrisa";
+    if (k !== caraActual) { caraActual = k; $("rostro").innerHTML = CARAS[k](); }
+  }
   function texto(t, tipo = "") { subtitulo.textContent = t; subtitulo.className = tipo; }
   function reposo() { estado("reposo"); texto("Toca mi cara para hablar", "tenue"); }
 
   // ---------- Parpadeo y mirada ----------
-  function programarParpadeo() {
-    setTimeout(() => {
-      cuerpo.classList.add("parpadeo");
-      setTimeout(() => cuerpo.classList.remove("parpadeo"), 140);
-      programarParpadeo();
-    }, 2500 + Math.random() * 4000);
-  }
   function mirar(x, y = 0) {
-    ojos.style.setProperty("--mirar-x", Math.max(-1, Math.min(1, x)).toFixed(2));
-    if (cuerpo.dataset.estado !== "pensando") ojos.style.setProperty("--mirar-y", y.toFixed(2));
+    const mx = Math.max(-1, Math.min(1, x)) * 14, my = Math.max(-1, Math.min(1, y)) * 8;
+    $("mirada").style.transform = `translate(${mx.toFixed(1)}px, ${my.toFixed(1)}px)`;
   }
   // Mirada errante cuando no hay cámara
   setInterval(() => { if (!camaraActiva && cuerpo.dataset.estado === "reposo") mirar(Math.random() * 1.6 - .8, Math.random() * .6 - .3); }, 4000);
@@ -191,16 +199,23 @@
 
   // Voz: primero la costeña de ElevenLabs (/api/voz); si no está disponible, la de la tablet
   let audioActual = null;
+  let caraHablando = "hablando";
   let vozNube = true;
   function callar() {
     if ("speechSynthesis" in window) speechSynthesis.cancel();
     if (audioActual) { const a = audioActual; audioActual = null; a.pause(); }
   }
-  function alTerminar() { if (cuerpo.dataset.estado === "hablando") { estado("feliz"); reposoTras(1500); } }
+  let expresionFinal = "feliz";
+  function alTerminar() { if (["hablando", "riendo"].includes(cuerpo.dataset.estado)) { estado(expresionFinal); reposoTras(2200); } }
+  const esperar = (ms) => new Promise((ok) => setTimeout(ok, ms));
 
-  async function decir(t) {
+  async function decir(t, expresion) {
     texto(t);
     callar();
+    const emo = EMOCIONES.includes(expresion) ? expresion : null;
+    expresionFinal = emo || "feliz";
+    caraHablando = emo === "riendo" ? "riendo" : "hablando";
+    if (emo) { estado(emo); await esperar(700); }
     if (vozNube) {
       try {
         const r = await fetch("/api/voz", {
@@ -214,7 +229,7 @@
           const a = new Audio(url);
           audioActual = a;
           const sono = await new Promise((resolver) => {
-            a.onplay = () => estado("hablando");
+            a.onplay = () => estado(caraHablando);
             a.onended = a.onerror = a.onpause = () => { URL.revokeObjectURL(url); if (audioActual === a) audioActual = null; alTerminar(); resolver(true); };
             a.play().catch(() => { if (audioActual === a) audioActual = null; resolver(false); });
           });
@@ -225,21 +240,34 @@
     return decirLocal(t);
   }
 
+  // Voz de la tablet: habla por frases para que las historias largas no se corten
   function decirLocal(t) {
     return new Promise((resolver) => {
       if (!("speechSynthesis" in window)) { reposoTras(4000); return resolver(); }
       speechSynthesis.cancel();
-      const u = new SpeechSynthesisUtterance(t);
-      u.lang = voz ? voz.lang : "es-CO";
-      if (voz) u.voice = voz;
-      u.rate = parseFloat(localStorage.getItem("robotVelocidad")) || 1.02; u.pitch = parseFloat(localStorage.getItem("robotTono")) || 1.15;
-      u.onstart = () => estado("hablando");
-      u.onend = u.onerror = () => { alTerminar(); resolver(); };
-      speechSynthesis.speak(u);
+      const frases = (t.match(/[^.!?¡¿]+[.!?]+|[^.!?]+$/g) || [t]).map(f => f.trim()).filter(Boolean);
+      const lotes = [];
+      for (const f of frases) {
+        if (lotes.length && (lotes[lotes.length - 1] + " " + f).length < 180) lotes[lotes.length - 1] += " " + f;
+        else lotes.push(f);
+      }
+      const velocidad = parseFloat(localStorage.getItem("robotVelocidad")) || 1.02;
+      const tono = parseFloat(localStorage.getItem("robotTono")) || 1.15;
+      lotes.forEach((trozo, i) => {
+        const u = new SpeechSynthesisUtterance(trozo);
+        u.lang = voz ? voz.lang : "es-CO";
+        if (voz) u.voice = voz;
+        u.rate = velocidad; u.pitch = tono;
+        if (i === 0) u.onstart = () => estado(caraHablando);
+        if (i === lotes.length - 1) u.onend = () => { alTerminar(); resolver(); };
+        u.onerror = (e) => { if (e.error !== "interrupted" && e.error !== "canceled") console.warn("Voz:", e.error); alTerminar(); resolver(); };
+        speechSynthesis.speak(u);
+      });
     });
   }
+
   let temporizadorReposo;
-  function reposoTras(ms) { clearTimeout(temporizadorReposo); temporizadorReposo = setTimeout(() => { if (["feliz", "hablando"].includes(cuerpo.dataset.estado)) reposo(); }, ms); }
+  function reposoTras(ms) { clearTimeout(temporizadorReposo); temporizadorReposo = setTimeout(() => { if (["hablando", ...EMOCIONES].includes(cuerpo.dataset.estado)) reposo(); }, ms); }
 
   // ---------- Escuchar (voz a texto) ----------
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -285,14 +313,16 @@
     historial.push({ role: "user", content: p });
     estado("pensando");
     texto(p);
+    const avisoLento = setTimeout(() => { if (cuerpo.dataset.estado === "pensando") texto("Déjame averiguar eso…", "tenue"); }, 4000);
 
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json", "x-robot-pin": pin },
-        body: JSON.stringify({ messages: historial.slice(-12) })
+        body: JSON.stringify({ messages: historial.slice(-20) })
       });
       const datos = await r.json().catch(() => ({}));
+      clearTimeout(avisoLento);
       if (r.status === 401) { historial.pop(); pedirPin("El PIN ya no es válido. Escríbelo de nuevo."); return; }
       if (!r.ok) {
         historial.pop();
@@ -302,8 +332,9 @@
       }
       historial.push({ role: "assistant", content: datos.reply });
       ultimoUso = Date.now();
-      await decir(datos.reply);
+      await decir(datos.reply, datos.expresion);
     } catch {
+      clearTimeout(avisoLento);
       historial.pop();
       estado("reposo");
       texto("Sin conexión a internet. Revisa el wifi de la tablet.", "error");
@@ -364,11 +395,12 @@
         // La cámara frontal se ve en espejo: invertimos X para que mire hacia la persona
         const x = -((sumaX / cambios) / (AN - 1) * 2 - 1);
         const y = (sumaY / cambios) / (AL - 1) * 2 - 1;
+        if (activo && cuerpo.dataset.estado === "dormido" && !reunion) reposo();
         if (cuerpo.dataset.estado === "reposo") mirar(x, y * .6);
         const llegoAlguien = Date.now() - quietoDesde > 15000;
         if (llegoAlguien && !reunion && cuerpo.dataset.estado === "reposo" && Date.now() - ultimoSaludo > SEGUNDOS_ENTRE_SALUDOS * 1000) {
           ultimoSaludo = Date.now();
-          decir(SALUDO_PRESENCIA);
+          decir(SALUDO_PRESENCIA, "feliz");
         }
         quietoDesde = Date.now();
       }
@@ -507,6 +539,8 @@
   }
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") mantenerEncendida(); });
 
+  estado("dormido");
+
   // ---------- PIN y arranque ----------
   function pedirPin(mensaje = "") {
     activo = false;
@@ -533,10 +567,15 @@
     try { usarCamara = localStorage.getItem("robotCamara") !== "0"; } catch {}
     if (usarCamara && !camaraActiva) encenderCamara();
     reposo();
-    if (primeraVez) { primeraVez = false; ultimoSaludo = Date.now(); decir(SALUDO_INICIAL); }
+    if (primeraVez) { primeraVez = false; ultimoSaludo = Date.now(); decir(SALUDO_INICIAL, "feliz"); }
   }
 
-  programarParpadeo();
+  setInterval(() => {
+    if (activo && !reunion && cuerpo.dataset.estado === "reposo" && Date.now() - Math.max(ultimoUso, quietoDesde) > 10 * 60000) {
+      estado("dormido"); texto("Toca mi cara para despertarme", "tenue");
+    }
+  }, 30000);
+
   if (pin) {
     // Los navegadores exigen un toque antes de hablar: el primer toque despierta al robot
     estado("dormido");
