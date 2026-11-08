@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="es-CO">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123E86">
+<title>Voces del robot</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root { --placa:#123E86; --borde:#0D2F69; --hielo:#DDF1FF; --cielo:#5DB2F2; --niebla:#A9CBEE; --alerta:#FFC66B; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  html, body { background:var(--placa); color:var(--hielo); font-family:"Fredoka","Nunito",system-ui,sans-serif; }
+  body { padding:calc(24px + env(safe-area-inset-top,0)) 24px calc(24px + env(safe-area-inset-bottom,0)); }
+  main { max-width:960px; margin:0 auto; display:grid; gap:24px; }
+  header { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+  h1 { font-size:2rem; font-weight:600; }
+  a.volver { color:var(--hielo); text-decoration:none; border:2px solid var(--niebla); border-radius:999px; padding:8px 18px; }
+  .panel { background:var(--borde); border-radius:20px; padding:20px; display:grid; gap:16px; }
+  label { display:grid; gap:6px; font-size:1.05rem; }
+  textarea { font:inherit; font-size:1.1rem; color:var(--hielo); background:var(--placa); border:2px solid var(--niebla); border-radius:14px; padding:12px; resize:vertical; min-height:72px; }
+  .ajustes { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .fila { display:flex; justify-content:space-between; }
+  .fila output { color:var(--cielo); font-weight:600; }
+  input[type=range] { width:100%; accent-color:var(--cielo); height:32px; }
+  .filtro { display:flex; align-items:center; gap:10px; color:var(--niebla); }
+  .filtro input { width:22px; height:22px; accent-color:var(--cielo); }
+  ul { list-style:none; display:grid; gap:10px; }
+  li { display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:16px; background:var(--borde); border:2px solid transparent; }
+  li.elegida { border-color:var(--cielo); }
+  .info { flex:1; min-width:0; }
+  .nombre { font-weight:500; font-size:1.1rem; overflow-wrap:anywhere; }
+  .meta { color:var(--niebla); font-size:.95rem; }
+  button { font:inherit; font-size:1rem; cursor:pointer; border-radius:12px; padding:10px 16px; border:2px solid var(--niebla); background:transparent; color:var(--hielo); white-space:nowrap; }
+  button.usar { background:var(--cielo); border-color:var(--cielo); color:var(--borde); font-weight:600; }
+  li.elegida button.usar { background:transparent; color:var(--cielo); border-color:var(--cielo); }
+  button:focus-visible, textarea:focus-visible, input:focus-visible, a:focus-visible { outline:3px solid var(--alerta); outline-offset:3px; }
+  #aviso { color:var(--niebla); line-height:1.45; }
+  #aviso.error { color:var(--alerta); }
+  @media (max-width:640px) { .ajustes { grid-template-columns:1fr; } li { flex-wrap:wrap; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Voces del robot</h1>
+    <a class="volver" href="/">Volver al robot</a>
+  </header>
+
+  <section class="panel">
+    <label>Frase de prueba
+      <textarea id="frase">¡Hola Caro! Soy el asistente de Ana C de Seguros. Hoy tenemos dos renovaciones pendientes.</textarea>
+    </label>
+    <div class="ajustes">
+      <label><span class="fila">Tono <output id="v-tono">1.15</output></span>
+        <input id="tono" type="range" min="0.5" max="2" step="0.05" value="1.15"></label>
+      <label><span class="fila">Velocidad <output id="v-vel">1.02</output></span>
+        <input id="velocidad" type="range" min="0.6" max="1.6" step="0.02" value="1.02"></label>
+    </div>
+    <label class="filtro"><input id="todas" type="checkbox"> Mostrar también voces de España y otros idiomas</label>
+  </section>
+
+  <p id="aviso" aria-live="polite">Cargando las voces de este dispositivo…</p>
+  <ul id="lista"></ul>
+</main>
+
+<script>
+(() => {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const leer = (k) => { try { return localStorage.getItem(k); } catch { return null; } };
+  const guardar = (k, v) => { try { localStorage.setItem(k, v); } catch {} };
+
+  const tono = $("tono"), vel = $("velocidad");
+  if (leer("robotTono")) tono.value = leer("robotTono");
+  if (leer("robotVelocidad")) vel.value = leer("robotVelocidad");
+  const pintarValores = () => { $("v-tono").textContent = (+tono.value).toFixed(2); $("v-vel").textContent = (+vel.value).toFixed(2); };
+  pintarValores();
+  tono.oninput = vel.oninput = () => {
+    pintarValores();
+    if (leer("robotVoz")) { guardar("robotTono", tono.value); guardar("robotVelocidad", vel.value); }
+  };
+
+  if (!("speechSynthesis" in window)) { $("aviso").textContent = "Este navegador no tiene voces. Abre la página en Google Chrome."; $("aviso").className = "error"; return; }
+
+  function probar(v) {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance($("frase").value.trim() || "Hola, esta es mi voz.");
+    u.voice = v; u.lang = v.lang; u.pitch = +tono.value; u.rate = +vel.value;
+    speechSynthesis.speak(u);
+  }
+
+  // Español latinoamericano: es-419 y países de América (es-US es el español neutro de Google)
+  const LATAM = ["es-co","es-mx","es-us","es-419","es-ar","es-cl","es-pe","es-ve","es-ec","es-pa","es-cr","es-do","es-pr","es-gt","es-hn","es-ni","es-sv","es-bo","es-py","es-uy","es-cu"];
+  const norm = (v) => (v.lang || "").toLowerCase().replace("_", "-");
+  const esLatam = (v) => LATAM.includes(norm(v));
+  const rango = (v) => { const i = ["es-co","es-mx","es-us","es-419"].indexOf(norm(v)); return i >= 0 ? i : esLatam(v) ? 4 : 5; };
+  const region = (v) => ({ "es-co":"Colombia", "es-mx":"México", "es-us":"Latinoamérica neutro", "es-419":"Latinoamérica" })[norm(v)] || (esLatam(v) ? "Latinoamérica" : v.lang);
+
+  function pintar() {
+    const todas = speechSynthesis.getVoices();
+    if (!todas.length) return;
+    const elegida = leer("robotVoz");
+    const voces = todas
+      .filter(v => $("todas").checked || esLatam(v))
+      .sort((a, b) => rango(a) - rango(b) || a.name.localeCompare(b.name));
+
+    $("aviso").className = "";
+    $("aviso").textContent = voces.length
+      ? `${voces.length} voces disponibles en este dispositivo. Prueba varias y toca “Usar esta voz” en la que te guste.`
+      : "No hay voces de español latinoamericano. En Android: Ajustes → Administración general → Texto a voz → Motor de Google → Instalar datos de voz → Español (Estados Unidos) o Español (México).";
+
+    const lista = $("lista");
+    lista.innerHTML = "";
+    voces.forEach(v => {
+      const li = document.createElement("li");
+      const esElegida = elegida === v.voiceURI || elegida === v.name;
+      if (esElegida) li.className = "elegida";
+      li.innerHTML = `<div class="info"><div class="nombre"></div><div class="meta"></div></div>
+        <button type="button" class="probar">Probar</button>
+        <button type="button" class="usar">${esElegida ? "En uso" : "Usar esta voz"}</button>`;
+      li.querySelector(".nombre").textContent = v.name;
+      li.querySelector(".meta").textContent = `${region(v)} (${v.lang})${v.localService ? "" : " · requiere internet"}${v.default ? " · predeterminada" : ""}`;
+      li.querySelector(".probar").onclick = () => probar(v);
+      li.querySelector(".usar").onclick = () => {
+        guardar("robotVoz", v.voiceURI || v.name);
+        guardar("robotTono", tono.value);
+        guardar("robotVelocidad", vel.value);
+        pintar();
+        probar(v);
+      };
+      lista.appendChild(li);
+    });
+  }
+
+  $("todas").onchange = pintar;
+  speechSynthesis.onvoiceschanged = pintar;
+  pintar();
+  setTimeout(() => { if (!speechSynthesis.getVoices().length) { $("aviso").textContent = "El navegador no entregó ninguna voz. Recarga la página."; $("aviso").className = "error"; } }, 3000);
+})();
+</script>
+</body>
+</html>

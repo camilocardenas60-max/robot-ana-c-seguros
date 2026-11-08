@@ -89,6 +89,17 @@
     padding: calc(var(--u) * 1.6); border: 0; border-radius: calc(var(--u) * 2); background: var(--cielo); color: var(--placa-borde); }
   #error-pin { color: var(--alerta); min-height: 1.4em; font-size: calc(var(--u) * 2.4); }
 
+  /* Modo reunión */
+  #indicador-reunion { position: fixed; top: calc(var(--u) * 2.5 + env(safe-area-inset-top, 0)); left: calc(var(--u) * 2.5);
+    display: none; align-items: center; gap: calc(var(--u) * 1.2); font-size: calc(var(--u) * 2.4); font-weight: 500; }
+  #indicador-reunion::before { content: ""; width: calc(var(--u) * 2); height: calc(var(--u) * 2); border-radius: 50%; background: #FF5A5F;
+    animation: grabando 1.6s ease-in-out infinite; }
+  body.en-reunion #indicador-reunion { display: flex; }
+  body.en-reunion .anillo { opacity: 0 !important; animation: none; }
+  body.en-reunion .controles { opacity: 1; }
+  #btn-reunion[aria-pressed="true"] { background: #FF5A5F; border-color: #FF5A5F; color: #fff; }
+  @keyframes grabando { 50% { opacity: .35; } }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   }
@@ -106,7 +117,10 @@
 
 <p id="subtitulo" class="tenue" aria-live="polite">Toca mi cara para hablar</p>
 
+<div id="indicador-reunion" aria-live="polite">Grabando reunión <span id="tiempo-reunion">00:00</span></div>
+
 <div class="controles">
+  <button id="btn-reunion" type="button" aria-pressed="false">Reunión</button>
   <button id="btn-camara" type="button" aria-pressed="false">Cámara</button>
   <button id="btn-pantalla" type="button">Pantalla completa</button>
 </div>
@@ -168,22 +182,59 @@
   let voz = null;
   function elegirVoz() {
     const voces = speechSynthesis.getVoices();
-    voz = voces.find(v => v.lang === "es-CO") || voces.find(v => v.lang === "es-US") ||
+    let preferida = ""; try { preferida = localStorage.getItem("robotVoz") || ""; } catch {}
+    voz = (preferida && voces.find(v => v.voiceURI === preferida || v.name === preferida)) ||
+          voces.find(v => v.lang === "es-CO") || voces.find(v => v.lang === "es-US") ||
           voces.find(v => v.lang === "es-MX") || voces.find(v => v.lang && v.lang.startsWith("es")) || null;
   }
   if ("speechSynthesis" in window) { elegirVoz(); speechSynthesis.onvoiceschanged = elegirVoz; }
 
-  function decir(t) {
+  // Voz: primero la costeña de ElevenLabs (/api/voz); si no está disponible, la de la tablet
+  let audioActual = null;
+  let vozNube = true;
+  function callar() {
+    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    if (audioActual) { const a = audioActual; audioActual = null; a.pause(); }
+  }
+  function alTerminar() { if (cuerpo.dataset.estado === "hablando") { estado("feliz"); reposoTras(1500); } }
+
+  async function decir(t) {
+    texto(t);
+    callar();
+    if (vozNube) {
+      try {
+        const r = await fetch("/api/voz", {
+          method: "POST",
+          headers: { "content-type": "application/json", "x-robot-pin": pin },
+          body: JSON.stringify({ text: t })
+        });
+        if (r.status === 501) vozNube = false; // ElevenLabs no configurado: usar siempre la voz de la tablet
+        if (r.ok) {
+          const url = URL.createObjectURL(await r.blob());
+          const a = new Audio(url);
+          audioActual = a;
+          const sono = await new Promise((resolver) => {
+            a.onplay = () => estado("hablando");
+            a.onended = a.onerror = a.onpause = () => { URL.revokeObjectURL(url); if (audioActual === a) audioActual = null; alTerminar(); resolver(true); };
+            a.play().catch(() => { if (audioActual === a) audioActual = null; resolver(false); });
+          });
+          if (sono) return;
+        }
+      } catch {}
+    }
+    return decirLocal(t);
+  }
+
+  function decirLocal(t) {
     return new Promise((resolver) => {
-      texto(t);
       if (!("speechSynthesis" in window)) { reposoTras(4000); return resolver(); }
       speechSynthesis.cancel();
       const u = new SpeechSynthesisUtterance(t);
       u.lang = voz ? voz.lang : "es-CO";
       if (voz) u.voice = voz;
-      u.rate = 1.02; u.pitch = 1.15;
+      u.rate = parseFloat(localStorage.getItem("robotVelocidad")) || 1.02; u.pitch = parseFloat(localStorage.getItem("robotTono")) || 1.15;
       u.onstart = () => estado("hablando");
-      u.onend = u.onerror = () => { if (cuerpo.dataset.estado === "hablando") { estado("feliz"); reposoTras(1500); } resolver(); };
+      u.onend = u.onerror = () => { alTerminar(); resolver(); };
       speechSynthesis.speak(u);
     });
   }
@@ -195,7 +246,7 @@
 
   function escuchar() {
     if (!SR) { texto("Este navegador no reconoce voz. Abre el robot en Google Chrome.", "error"); return; }
-    if ("speechSynthesis" in window) speechSynthesis.cancel();
+    callar();
     clearTimeout(temporizadorReposo);
 
     reconocedor = new SR();
@@ -261,7 +312,7 @@
 
   // ---------- Toque en la cara ----------
   $("cara").addEventListener("click", () => {
-    if (!activo) return;
+    if (!activo || reunion) return;
     const e = cuerpo.dataset.estado;
     if (e === "escuchando" && reconocedor) { reconocedor.stop(); return; }
     if (e === "pensando") return;
@@ -315,7 +366,7 @@
         const y = (sumaY / cambios) / (AL - 1) * 2 - 1;
         if (cuerpo.dataset.estado === "reposo") mirar(x, y * .6);
         const llegoAlguien = Date.now() - quietoDesde > 15000;
-        if (llegoAlguien && cuerpo.dataset.estado === "reposo" && Date.now() - ultimoSaludo > SEGUNDOS_ENTRE_SALUDOS * 1000) {
+        if (llegoAlguien && !reunion && cuerpo.dataset.estado === "reposo" && Date.now() - ultimoSaludo > SEGUNDOS_ENTRE_SALUDOS * 1000) {
           ultimoSaludo = Date.now();
           decir(SALUDO_PRESENCIA);
         }
@@ -325,6 +376,124 @@
     anterior = gris;
   }
   $("btn-camara").addEventListener("click", (e) => { e.stopPropagation(); camaraActiva ? apagarCamara() : encenderCamara(); });
+
+  // ---------- Modo reunión: graba, transcribe por tramos y envía resumen al correo ----------
+  const AVISO_REUNION = "Les aviso que voy a grabar esta reunión para hacer el resumen. Cuando terminen, toquen el botón Terminar.";
+  const TRAMO_MS = 120000; // tramos de 2 minutos (Vercel no acepta archivos grandes)
+  let reunion = null;
+
+  function formatoTiempo(ms) {
+    const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+    return (h ? h + ":" : "") + String(m).padStart(2, "0") + ":" + String(x).padStart(2, "0");
+  }
+  function tipoAudio() {
+    for (const t of ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"]) if (window.MediaRecorder && MediaRecorder.isTypeSupported(t)) return t;
+    return "";
+  }
+
+  async function transcribirTramo(blob, indice, intento = 1) {
+    try {
+      const r = await fetch("/api/transcribir", { method: "POST", headers: { "content-type": blob.type || "audio/webm", "x-robot-pin": pin }, body: blob });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || r.status);
+      reunion.textos[indice] = d.texto || "";
+    } catch (e) {
+      if (intento < 3) { await new Promise(ok => setTimeout(ok, 3000 * intento)); return transcribirTramo(blob, indice, intento + 1); }
+      reunion.textos[indice] = `[Tramo ${indice + 1} sin transcribir]`;
+    }
+  }
+
+  function grabarTramo() {
+    if (!reunion || reunion.terminando) return;
+    const rec = new MediaRecorder(reunion.flujo, { mimeType: reunion.tipo || undefined, audioBitsPerSecond: 32000 });
+    const partes = [];
+    const indice = reunion.tramos++;
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) partes.push(e.data); };
+    rec.onstop = () => {
+      const blob = new Blob(partes, { type: rec.mimeType || "audio/webm" });
+      if (blob.size > 2000) reunion.pendientes.push(transcribirTramo(blob, indice));
+      else reunion.textos[indice] = "";
+      if (!reunion.terminando) grabarTramo(); // empieza el siguiente tramo de inmediato
+    };
+    reunion.rec = rec;
+    rec.start();
+    reunion.corte = setTimeout(() => { if (rec.state === "recording") rec.stop(); }, TRAMO_MS);
+  }
+
+  async function iniciarReunion() {
+    if (!window.MediaRecorder) { texto("Este navegador no puede grabar audio. Usa Google Chrome.", "error"); return; }
+    if (reconocedor) reconocedor.abort();
+    let flujo;
+    try { flujo = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+    catch { texto("No pude usar el micrófono. Revisa el permiso del navegador.", "error"); return; }
+    await decir(AVISO_REUNION);
+    reunion = { flujo, tipo: tipoAudio(), textos: [], pendientes: [], tramos: 0, inicio: Date.now(), terminando: false };
+    cuerpo.classList.add("en-reunion");
+    $("btn-reunion").setAttribute("aria-pressed", "true");
+    $("btn-reunion").textContent = "Terminar";
+    estado("escuchando");
+    texto("Estoy grabando la reunión", "tenue");
+    reunion.reloj = setInterval(() => { $("tiempo-reunion").textContent = formatoTiempo(Date.now() - reunion.inicio); }, 1000);
+    grabarTramo();
+    mantenerEncendida();
+  }
+
+  async function terminarReunion() {
+    const r = reunion;
+    r.terminando = true;
+    clearTimeout(r.corte);
+    clearInterval(r.reloj);
+    const ultimoTramo = new Promise((ok) => { if (r.rec && r.rec.state === "recording") { r.rec.addEventListener("stop", () => setTimeout(ok, 50), { once: true }); r.rec.stop(); } else ok(); });
+    await ultimoTramo;
+    r.flujo.getTracks().forEach(t => t.stop());
+    cuerpo.classList.remove("en-reunion");
+    $("btn-reunion").setAttribute("aria-pressed", "false");
+    $("btn-reunion").textContent = "Reunión";
+    estado("pensando");
+    texto("Terminando de escuchar la reunión…", "tenue");
+    await Promise.all(r.pendientes);
+    const datos = {
+      transcripcion: r.textos.filter(Boolean).join("\n"),
+      fecha: new Date(r.inicio).toLocaleString("es-CO", { dateStyle: "long", timeStyle: "short" }),
+      duracion: formatoTiempo(Date.now() - r.inicio)
+    };
+    reunion = null;
+    if (datos.transcripcion.replace(/\[Tramo \d+ sin transcribir\]/g, "").trim().length < 20) {
+      await decir("No alcancé a entender nada de la reunión. Revisa que el micrófono esté cerca.");
+      return;
+    }
+    try { localStorage.setItem("robotUltimaReunion", JSON.stringify(datos)); } catch {}
+    await enviarResumen(datos);
+  }
+
+  async function enviarResumen(datos) {
+    estado("pensando");
+    texto("Preparando el resumen…", "tenue");
+    try {
+      const r = await fetch("/api/resumen", { method: "POST", headers: { "content-type": "application/json", "x-robot-pin": pin }, body: JSON.stringify(datos) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || "Error");
+      try { localStorage.removeItem("robotUltimaReunion"); } catch {}
+      $("btn-reunion").textContent = "Reunión";
+      const tareas = d.tareas ? ` Quedaron ${d.tareas} tareas anotadas.` : "";
+      await decir("Listo, te envié el resumen al correo." + tareas);
+    } catch (e) {
+      $("btn-reunion").textContent = "Reenviar resumen";
+      estado("reposo");
+      texto((e.message || "No se pudo enviar el resumen.") + " Toca Reenviar resumen para intentarlo de nuevo.", "error");
+    }
+  }
+
+  $("btn-reunion").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (!activo) return;
+    if (reunion && !reunion.terminando) { terminarReunion(); return; }
+    if (reunion) return;
+    let pendiente = null;
+    try { pendiente = JSON.parse(localStorage.getItem("robotUltimaReunion") || "null"); } catch {}
+    if (pendiente && $("btn-reunion").textContent === "Reenviar resumen") { enviarResumen(pendiente); return; }
+    iniciarReunion();
+  });
 
   // ---------- Pantalla completa y pantalla siempre encendida ----------
   $("btn-pantalla").addEventListener("click", (e) => {

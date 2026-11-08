@@ -1,5 +1,10 @@
 {
-  "functions": { "api/chat.js": { "maxDuration": 30 } },
+  "functions": {
+    "api/chat.js": { "maxDuration": 30 },
+    "api/voz.js": { "maxDuration": 30 },
+    "api/transcribir.js": { "maxDuration": 60 },
+    "api/resumen.js": { "maxDuration": 60 }
+  },
   "headers": [
     {
       "source": "/(.*)",
