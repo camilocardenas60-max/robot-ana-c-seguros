@@ -81,6 +81,26 @@
     background: var(--placa-borde); color: var(--hielo); }
   .tarjeta-pin button { width: 100%; font: inherit; font-size: calc(var(--u) * 3); font-weight: 600; cursor: pointer;
     padding: calc(var(--u) * 1.6); border: 0; border-radius: calc(var(--u) * 2); background: var(--cielo); color: var(--placa-borde); }
+  /* Panel de caras */
+  #panel-caras { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(8, 25, 60, .75); }
+  #panel-caras[hidden] { display: none; }
+  .tarjeta-caras { width: min(94vw, 980px); max-height: 92vh; overflow: auto; background: var(--placa-borde); border-radius: 20px; padding: 20px; display: grid; gap: 14px; }
+  .cab-caras { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .cab-caras h2 { font-size: 24px; font-weight: 600; }
+  .cuerpo-caras { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  #vista-caras { aspect-ratio: 4 / 3; background: #0A2350; border-radius: 12px; overflow: hidden; }
+  .lado-caras { display: grid; gap: 12px; }
+  #diag-caras { font-size: 17px; line-height: 1.4; min-height: 3em; color: var(--hielo); }
+  #form-caras { display: flex; gap: 8px; }
+  #form-caras input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 10px 12px; border-radius: 12px; border: 2px solid var(--niebla); background: var(--placa); color: var(--hielo); }
+  #panel-caras button { font: inherit; font-size: 16px; padding: 10px 16px; border-radius: 12px; border: 2px solid var(--niebla); background: transparent; color: var(--hielo); cursor: pointer; }
+  #form-caras button { background: var(--cielo); border-color: var(--cielo); color: var(--placa-borde); font-weight: 600; }
+  #lista-caras { list-style: none; display: grid; gap: 8px; }
+  #lista-caras li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: var(--placa); }
+  #lista-caras li.vacio { color: var(--niebla); }
+  .nota-caras { font-size: 14px; color: var(--niebla); }
+  @media (max-width: 700px) { .cuerpo-caras { grid-template-columns: 1fr; } }
+
   #error-pin { color: var(--alerta); min-height: 1.4em; font-size: calc(var(--u) * 2.4); }
 
   /* Modo reunión */
@@ -114,10 +134,29 @@
 
 <div class="controles">
   <button id="btn-reunion" type="button" aria-pressed="false">Reunión</button>
+  <button id="btn-caras" type="button">Caras</button>
   <button id="btn-vibracion" type="button" aria-pressed="true">Vibración</button>
   <button id="btn-camara" type="button" aria-pressed="false">Cámara</button>
   <button id="btn-pantalla" type="button">Pantalla completa</button>
 </div>
+
+<section id="panel-caras" hidden aria-label="Caras de la familia">
+  <div class="tarjeta-caras">
+    <div class="cab-caras"><h2>Caras de la familia</h2><button id="cerrar-caras" type="button">Cerrar</button></div>
+    <div class="cuerpo-caras">
+      <div id="vista-caras"></div>
+      <div class="lado-caras">
+        <p id="diag-caras" aria-live="polite">…</p>
+        <form id="form-caras" autocomplete="off">
+          <input id="nombre-cara" type="text" placeholder="Nombre, p. ej. Juan Diego" aria-label="Nombre de la persona">
+          <button type="submit">Aprender</button>
+        </form>
+        <ul id="lista-caras"></ul>
+        <p class="nota-caras">Las caras se guardan solo en este dispositivo.</p>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section id="pantalla-pin" hidden>
   <form class="tarjeta-pin" id="form-pin" autocomplete="off">
@@ -505,6 +544,9 @@
   let camaraActiva = false, flujo = null, bucle = null;
   const video = document.createElement("video");
   video.muted = true; video.playsInline = true;
+  video.setAttribute("aria-hidden", "true");
+  video.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;";
+  document.body.appendChild(video);
   const lienzo = document.createElement("canvas");
   const AN = 32, AL = 24;
   lienzo.width = AN; lienzo.height = AL;
@@ -554,7 +596,7 @@
           saludarAlLlegar();
         }
         quietoDesde = Date.now();
-        if (hayCaras() && !reunion && ["reposo", "dormido"].includes(cuerpo.dataset.estado) && Date.now() - ultimoIntentoCara > 5000) reconocerYSaludar();
+        if (hayCaras() && !reunion && $("panel-caras").hidden && ["reposo", "dormido"].includes(cuerpo.dataset.estado) && Date.now() - ultimoIntentoCara > 5000) reconocerYSaludar();
       }
     }
     anterior = gris;
@@ -807,22 +849,28 @@
   function leerCaras() { try { return JSON.parse(localStorage.getItem("valeryCaras") || "{}"); } catch { return {}; } }
   function guardarCaras(c) { try { localStorage.setItem("valeryCaras", JSON.stringify(c)); } catch {} }
   const hayCaras = () => Object.keys(leerCaras()).length > 0;
+  const UMBRAL_CARA = .55; // distancia máxima para dar por reconocida una cara (menor = más parecido)
   async function descriptorActual() {
     if (!camaraActiva || video.readyState < 2) return null;
-    const r = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: .5 }))
+    const r = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: .4 }))
       .withFaceLandmarks(true).withFaceDescriptor();
     return r ? Array.from(r.descriptor) : null;
   }
-  function quienEs(d) {
-    let mejor = null, distMin = .5; // menor distancia = más parecido; 0,5 es un umbral prudente
-    for (const [nombre, muestras] of Object.entries(leerCaras())) {
+  function masParecido(d) {
+    let nombre = null, dist = Infinity;
+    for (const [n, muestras] of Object.entries(leerCaras())) {
       for (const m of muestras) {
         let s = 0; for (let i = 0; i < d.length; i++) { const x = d[i] - m[i]; s += x * x; }
-        const dist = Math.sqrt(s);
-        if (dist < distMin) { distMin = dist; mejor = nombre; }
+        const dd = Math.sqrt(s);
+        if (dd < dist) { dist = dd; nombre = n; }
       }
     }
-    return mejor;
+    return { nombre, dist };
+  }
+  function quienEs(d) { const r = masParecido(d); return r.dist < UMBRAL_CARA ? r.nombre : null; }
+  async function turnoCara() { // espera a que termine otro análisis en curso
+    for (let i = 0; i < 30 && reconociendo; i++) await esperar(100);
+    reconociendo = true;
   }
   async function aprenderCara(nombre) {
     nombre = nombre.trim().replace(/^\w/, (l) => l.toUpperCase());
@@ -832,11 +880,14 @@
     try { await cargarFaceApi(); } catch { await decir("No pude cargar el reconocimiento de caras. Revisa el internet e intentemos otra vez."); return; }
     estado("escuchando", true);
     const muestras = [];
-    for (let i = 0; i < 12 && muestras.length < 6; i++) {
-      texto(`Mírame de frente, ${nombre}… ${muestras.length + 1} de 6`, "tenue");
-      try { const d = await descriptorActual(); if (d) muestras.push(d.map((x) => Math.round(x * 10000) / 10000)); } catch {}
-      await esperar(500);
-    }
+    await turnoCara();
+    try {
+      for (let i = 0; i < 20 && muestras.length < 6; i++) {
+        texto(`Mírame de frente, ${nombre}… ${muestras.length + 1} de 6`, "tenue");
+        try { const d = await descriptorActual(); if (d) muestras.push(d.map((x) => Math.round(x * 10000) / 10000)); } catch (e) { console.warn("Cara:", e); }
+        await esperar(450);
+      }
+    } finally { reconociendo = false; }
     if (muestras.length < 3) { await decir(`No te vi bien, ${nombre}. Acércate un poquito, con buena luz, e intentémoslo otra vez.`); return; }
     const caras = leerCaras(); caras[nombre] = muestras; guardarCaras(caras);
     marcarSaludo(nombre);
@@ -849,12 +900,73 @@
   function marcarSaludo(nombre) { try { localStorage.setItem("valerySaludoCara:" + nombre, String(Date.now())); } catch {} }
   function saludadoHace(nombre) { try { return Date.now() - Number(localStorage.getItem("valerySaludoCara:" + nombre) || 0); } catch { return 0; } }
   async function reconocer() {
-    if (reconociendo || !hayCaras()) return null;
-    reconociendo = true; ultimoIntentoCara = Date.now();
+    if (!hayCaras()) return null;
+    await turnoCara(); ultimoIntentoCara = Date.now();
     try { await cargarFaceApi(); const d = await descriptorActual(); return d ? quienEs(d) : null; }
-    catch { return null; }
+    catch (e) { console.warn("Cara:", e); return null; }
     finally { reconociendo = false; }
   }
+
+  // ---------- Panel de caras: ver la cámara, aprender, borrar y diagnosticar ----------
+  let temporizadorPanel = null;
+  const salidaPanel = (t) => { $("diag-caras").textContent = t; };
+  function pintarListaCaras() {
+    const caras = leerCaras(), lista = $("lista-caras");
+    lista.innerHTML = "";
+    const nombres = Object.keys(caras);
+    if (!nombres.length) { lista.innerHTML = "<li class=\"vacio\">Todavía no conozco ninguna cara.</li>"; return; }
+    for (const n of nombres) {
+      const li = document.createElement("li");
+      li.innerHTML = `<span></span><button type="button">Borrar</button>`;
+      li.querySelector("span").textContent = `${n} (${caras[n].length} muestras)`;
+      li.querySelector("button").onclick = () => { olvidarCara(n); pintarListaCaras(); };
+      lista.appendChild(li);
+    }
+  }
+  async function diagnosticoCaras() {
+    if (reconociendo) return;
+    reconociendo = true;
+    try {
+      const d = await descriptorActual();
+      if (!d) { salidaPanel("No veo ninguna cara. Acércate, mira de frente y mejora la luz."); return; }
+      if (!hayCaras()) { salidaPanel("Veo una cara 👍 Escribe un nombre y toca Aprender."); return; }
+      const r = masParecido(d);
+      salidaPanel(r.dist < UMBRAL_CARA
+        ? `✅ Te reconozco: ${r.nombre} (distancia ${r.dist.toFixed(2)})`
+        : `Veo una cara que no conozco. La más parecida es ${r.nombre} (distancia ${r.dist.toFixed(2)}; necesito menos de ${UMBRAL_CARA}).`);
+    } catch (e) { salidaPanel("Error del reconocedor: " + (e.message || e)); }
+    finally { reconociendo = false; }
+  }
+  async function abrirPanelCaras() {
+    $("panel-caras").hidden = false;
+    pintarListaCaras();
+    if (!camaraActiva) await encenderCamara();
+    if (!camaraActiva) { salidaPanel("La cámara no está disponible. Revisa el permiso del navegador."); return; }
+    $("vista-caras").appendChild(video);
+    video.style.cssText = "width:100%;height:100%;object-fit:cover;transform:scaleX(-1);border-radius:12px;";
+    salidaPanel("Cargando el reconocedor (la primera vez tarda un poco)…");
+    try { await cargarFaceApi(); } catch (e) { salidaPanel("No cargó el reconocedor. Revisa el internet. (" + (e.message || e) + ")"); return; }
+    salidaPanel("Reconocedor listo. Mírame de frente…");
+    temporizadorPanel = setInterval(diagnosticoCaras, 1000);
+  }
+  function cerrarPanelCaras() {
+    clearInterval(temporizadorPanel);
+    $("panel-caras").hidden = true;
+    video.style.cssText = "position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;";
+    document.body.appendChild(video);
+  }
+  $("btn-caras").addEventListener("click", (e) => { e.stopPropagation(); if (activo) abrirPanelCaras(); });
+  $("cerrar-caras").addEventListener("click", cerrarPanelCaras);
+  $("form-caras").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const n = $("nombre-cara").value.trim();
+    if (!n) return;
+    clearInterval(temporizadorPanel);
+    $("nombre-cara").value = "";
+    await aprenderCara(n);
+    pintarListaCaras();
+    temporizadorPanel = setInterval(diagnosticoCaras, 1000);
+  });
   async function saludarConocido(nombre) {
     marcarSaludo(nombre); ultimoSaludo = Date.now();
     if (cuerpo.dataset.estado === "dormido") reposo();
@@ -865,7 +977,7 @@
     if (!camaraActiva) await encenderCamara();
     estado("escuchando", true); texto("Déjame verte bien…", "tenue");
     let nombre = null;
-    for (let i = 0; i < 4 && !nombre; i++) { nombre = await reconocer(); if (!nombre) await esperar(600); }
+    for (let i = 0; i < 6 && !nombre; i++) { nombre = await reconocer(); if (!nombre) await esperar(500); }
     if (nombre) marcarSaludo(nombre);
     const hay = hayCaras();
     await preguntar(nombre
