@@ -47,7 +47,7 @@ ${FAMILIA}
 - Con los niños habla según su edad: con el menor, juegos y palabras sencillas; con los mayores, más conversación. Siempre con respeto y cariño.
 - De vez en cuando, sin exagerar y cuando venga al caso, recuérdale a Caro algo bonito de Camilo, su esposo, que fue quien te construyó como regalo para ella.
 
-` : ""}Reconocimiento de caras: solo de la familia de Caro y con su permiso, nunca de clientes ni de desconocidos. Si te piden aprender la cara de alguien de la familia, pide que se ponga de frente a tu cámara y agrega [aprender_cara: Nombre]. Si te piden olvidar una cara, agrega [olvidar_cara: Nombre].
+` : ""}Reconocimiento de caras: solo de la familia de Caro y con su permiso, nunca de clientes ni de desconocidos. Si te piden aprender la cara de alguien de la familia, pide que se ponga de frente a tu cámara y agrega [aprender_cara: Nombre]. Si te piden olvidar una cara, agrega [olvidar_cara: Nombre]. Si te preguntan "¿quién soy?" o quién está frente a ti, di algo corto como "déjame verte bien" y agrega [quien_es]; luego recibirás lo que vio tu cámara.
 
 Herramientas de trabajo:
 - Libreta de recados: cuando te pidan anotar un recado o algo pendiente ("anota que llamó Juan por el SOAT"), confírmalo y agrega al final [recado: quién y qué, corto]. Cuando digan que un recado ya se atendió, agrega [recado_hecho: palabras clave]. Si preguntan qué recados hay, léelos de la lista de recados pendientes.
@@ -222,15 +222,16 @@ function extraerMemoria(texto) {
 
 function extraerAcciones(texto) {
   const recados = [], recadosHechos = [];
-  let foto = false, reporte = false, aprenderCara = null, olvidarCara = null;
+  let foto = false, reporte = false, aprenderCara = null, olvidarCara = null, quienEs = false;
   const limpio = String(texto || "")
     .replace(/\[\s*recado_hecho\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { recadosHechos.push(d.trim()); return " "; })
     .replace(/\[\s*recado\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { recados.push(d.trim()); return " "; })
     .replace(/\[\s*tomar_foto\s*\]/gi, () => { foto = true; return " "; })
     .replace(/\[\s*reporte\s*\]/gi, () => { reporte = true; return " "; })
     .replace(/\[\s*aprender_cara\s*:\s*([^\]]{2,60})\]/gi, (_, d) => { aprenderCara = d.trim(); return " "; })
-    .replace(/\[\s*olvidar_cara\s*:\s*([^\]]{2,60})\]/gi, (_, d) => { olvidarCara = d.trim(); return " "; });
-  return { recados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, limpio };
+    .replace(/\[\s*olvidar_cara\s*:\s*([^\]]{2,60})\]/gi, (_, d) => { olvidarCara = d.trim(); return " "; })
+    .replace(/\[\s*quien_es\s*\]/gi, () => { quienEs = true; return " "; });
+  return { recados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, quienEs, limpio };
 }
 
 function textoParaVoz(texto) {
@@ -315,10 +316,10 @@ export default async function handler(req, res) {
 
       const { expresion, texto } = extraerExpresion(content);
       const { recordar, olvidar, olvidarTodo, limpio } = extraerMemoria(texto);
-      const { recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, limpio: limpio2 } = extraerAcciones(limpio);
+      const { recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, quienEs, limpio: limpio2 } = extraerAcciones(limpio);
       const respuesta = textoParaVoz(limpio2);
       return res.status(200).json({ reply: respuesta || "Perdón, no te entendí. ¿Me lo repites?", expresion, recordar, olvidar, olvidarTodo,
-        recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara });
+        recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, quienEs });
     }
     return res.status(200).json({ reply: "Uy, me enredé buscando eso. ¿Me lo preguntas de otra forma?" });
   } catch (e) {

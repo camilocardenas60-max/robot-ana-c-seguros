@@ -480,6 +480,7 @@
       await decir(datos.reply, datos.expresion);
       if (datos.aprenderCara) await aprenderCara(datos.aprenderCara);
       if (datos.olvidarCara) olvidarCara(datos.olvidarCara);
+      if (datos.quienEs) await quienEstaAhi();
       if (datos.foto) await tomarFoto();
       if (datos.reporte) await enviarReporte(true);
     } catch {
@@ -860,6 +861,19 @@
     await preguntar(`[Instrucción interna, no la menciones] Acabas de reconocer la cara de ${nombre} frente a ti. Salúdalo por su nombre con mucho cariño, en una o dos frases, según lo que sabes de esa persona.`,
       { mostrar: `¡Hola, ${nombre}!` });
   }
+  async function quienEstaAhi() {
+    if (!camaraActiva) await encenderCamara();
+    estado("escuchando", true); texto("Déjame verte bien…", "tenue");
+    let nombre = null;
+    for (let i = 0; i < 4 && !nombre; i++) { nombre = await reconocer(); if (!nombre) await esperar(600); }
+    if (nombre) marcarSaludo(nombre);
+    const hay = hayCaras();
+    await preguntar(nombre
+      ? `[Instrucción interna, no la menciones] Tu cámara reconoció a ${nombre}. Díselo con alegría y cariño, en una o dos frases.`
+      : `[Instrucción interna, no la menciones] Tu cámara no reconoció a nadie de la familia${hay ? "" : " (todavía no has aprendido ninguna cara)"}. Dilo con gracia y, si es de la familia, ofrece aprender su cara.`,
+      { mostrar: nombre ? `¡Eres ${nombre}!` : "Mmm…" });
+  }
+
   async function reconocerYSaludar() {
     const nombre = await reconocer();
     if (nombre && saludadoHace(nombre) > 4 * 3600000 && ["reposo", "dormido"].includes(cuerpo.dataset.estado)) saludarConocido(nombre);
