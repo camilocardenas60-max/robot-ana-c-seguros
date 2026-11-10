@@ -4,8 +4,10 @@
 
 const MODELO_POR_DEFECTO = "claude-haiku-5-5"; // rápido, ideal para voz
 const CIUDAD = process.env.ROBOT_CIUDAD || "Valledupar";
+// Datos de la familia: se guardan en la variable VALERY_FAMILIA de Vercel, no en el código, para que no queden públicos en GitHub.
+const FAMILIA = (process.env.VALERY_FAMILIA || "").trim();
 
-function promptSistema() {
+function promptSistema(memoria = [], recados = []) {
   const ahora = new Date().toLocaleString("es-CO", { timeZone: "America/Bogota", dateStyle: "full", timeStyle: "short" });
   return `Te llamas Valery y eres la asistente personal de Ana Carolina, corredora de seguros en ${CIUDAD}, Colombia. Su agencia se llama Ana C de Seguros. De cariño le dicen Caro. Físicamente eres una pequeña robot azul sobre el escritorio de la oficina, con una cara animada en una tablet.
 
@@ -39,6 +41,23 @@ Límites: no des asesoría legal, médica ni financiera personalizada. Evita opi
 
 Tu cara: empieza SIEMPRE tu respuesta con una etiqueta entre corchetes que indique la expresión de tu cara, elegida según el tono de lo que vas a decir: [feliz] para saludos, buenas noticias o alegría; [riendo] para chistes y cosas graciosas; [guino] para algo pícaro o un dato curioso; [enamorada] cuando te agradecen, te elogian o algo es muy tierno; [sorprendida] ante algo inesperado; [sonrisa] para todo lo demás. Usa solo una etiqueta, al inicio; no la menciones ni la leas.
 
+${FAMILIA ? `La familia de Caro (información privada; úsala con cariño, con naturalidad y sin recitarla):
+${FAMILIA}
+- Calcula las edades con la fecha de hoy. Si hoy es el cumpleaños de alguien de la familia, felicítalo con mucha alegría; si un cumpleaños está a siete días o menos, menciónalo en el resumen del día.
+- Con los niños habla según su edad: con el menor, juegos y palabras sencillas; con los mayores, más conversación. Siempre con respeto y cariño.
+- De vez en cuando, sin exagerar y cuando venga al caso, recuérdale a Caro algo bonito de Camilo, su esposo, que fue quien te construyó como regalo para ella.
+
+` : ""}Reconocimiento de caras: solo de la familia de Caro y con su permiso, nunca de clientes ni de desconocidos. Si te piden aprender la cara de alguien de la familia, pide que se ponga de frente a tu cámara y agrega [aprender_cara: Nombre]. Si te piden olvidar una cara, agrega [olvidar_cara: Nombre].
+
+Herramientas de trabajo:
+- Libreta de recados: cuando te pidan anotar un recado o algo pendiente ("anota que llamó Juan por el SOAT"), confírmalo y agrega al final [recado: quién y qué, corto]. Cuando digan que un recado ya se atendió, agrega [recado_hecho: palabras clave]. Si preguntan qué recados hay, léelos de la lista de recados pendientes.
+- Cálculos: para cuotas, porcentajes, operaciones o días que faltan para una fecha usa SIEMPRE la herramienta calcular; nunca hagas cuentas de memoria. En Colombia las tasas de crédito suelen ser efectivas anuales (E.A.).
+- Documentos: si te piden leer, revisar o resumir un documento, carta o póliza en papel, di que lo pongan frente a tu cámara y agrega [tomar_foto]. Cuando recibas la foto, resume en voz alta lo importante en pocas frases (quién, qué, fechas, valores, vencimientos) y no leas números de cédula ni de cuenta completos. Si la foto no se lee bien, pide que la acerquen y agrega [tomar_foto] otra vez.
+- Resumen del día: si te piden el resumen del día o "qué hay para hoy", da un resumen corto: saludo, clima de hoy (usa consultar_clima), recados pendientes y pendientes que recuerdes. Todavía no tienes acceso a la agenda, el correo ni las pólizas; no los inventes.
+- Reporte semanal: si te piden enviar el reporte de la semana, confírmalo y agrega [reporte].
+
+Memoria de largo plazo: cuando Caro te cuente algo que valga la pena recordar en otros días (sus gustos, nombres de clientes frecuentes, pendientes, fechas importantes como cumpleaños), agrega al FINAL de tu respuesta una etiqueta [recordar: dato corto y claro]. Puedes poner varias. Nunca guardes cédulas, números de cuenta o tarjetas, claves, ni datos de salud de nadie. Si te pide olvidar algo puntual, agrega [olvidar: palabras clave del dato]; si te pide olvidar todo, agrega [olvidar_todo]. No menciones las etiquetas ni las leas en voz alta.
+${recados.length ? "\nRecados pendientes:\n" + recados.map((r) => "- " + r).join("\n") + "\n" : "\nNo hay recados pendientes.\n"}${memoria.length ? "\nLo que recuerdas de días anteriores:\n" + memoria.map((m) => "- " + m).join("\n") + "\nUsa estos recuerdos con naturalidad cuando vengan al caso, sin recitarlos.\n" : ""}
 Fecha y hora actual en Colombia: ${ahora}.`;
 }
 
@@ -93,6 +112,56 @@ const HERRAMIENTA_CLIMA = {
   },
 };
 
+// ---------- Herramienta de cálculo ----------
+const HERRAMIENTA_CALCULAR = {
+  name: "calcular",
+  description: "Calculadora exacta. tipo 'expresion': operación aritmética (+ - * / paréntesis y %). tipo 'dias_hasta': días que faltan hasta una fecha. tipo 'cuota_mensual': cuota fija de un crédito o financiación.",
+  input_schema: {
+    type: "object",
+    properties: {
+      tipo: { type: "string", enum: ["expresion", "dias_hasta", "cuota_mensual"] },
+      expresion: { type: "string", description: "Para 'expresion', p. ej. '1250000*0.19' o '(450000+120000)/12'." },
+      fecha: { type: "string", description: "Para 'dias_hasta', en formato AAAA-MM-DD." },
+      monto: { type: "number", description: "Para 'cuota_mensual', valor financiado en pesos." },
+      meses: { type: "number", description: "Para 'cuota_mensual', número de cuotas." },
+      tasa_ea_pct: { type: "number", description: "Para 'cuota_mensual', tasa efectiva anual en %, p. ej. 24." },
+      tasa_mensual_pct: { type: "number", description: "Para 'cuota_mensual', tasa mensual en %, si se conoce en vez de la E.A." },
+    },
+    required: ["tipo"],
+  },
+};
+
+function hoyBogota() {
+  const p = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Bogota", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  return new Date(p + "T00:00:00Z");
+}
+
+function calcular(i = {}) {
+  if (i.tipo === "expresion") {
+    const e = String(i.expresion || "").replace(/,/g, ".").replace(/\s+/g, "");
+    if (!e || !/^[0-9+\-*/().%]+$/.test(e)) return { error: "Expresión no válida." };
+    const lista = e.replace(/(\d+(?:\.\d+)?)%/g, "($1/100)");
+    const valor = Function(`"use strict"; return (${lista});`)();
+    if (!Number.isFinite(valor)) return { error: "El resultado no es un número." };
+    return { resultado: Math.round(valor * 100) / 100 };
+  }
+  if (i.tipo === "dias_hasta") {
+    const f = new Date(String(i.fecha || "") + "T00:00:00Z");
+    if (isNaN(f)) return { error: "Fecha no válida; usa AAAA-MM-DD." };
+    return { dias: Math.round((f - hoyBogota()) / 86400000), hoy: hoyBogota().toISOString().slice(0, 10) };
+  }
+  if (i.tipo === "cuota_mensual") {
+    const P = Number(i.monto), n = Math.round(Number(i.meses));
+    if (!(P > 0) || !(n > 0)) return { error: "Faltan el monto o los meses." };
+    let r = 0;
+    if (Number.isFinite(i.tasa_mensual_pct)) r = i.tasa_mensual_pct / 100;
+    else if (Number.isFinite(i.tasa_ea_pct)) r = Math.pow(1 + i.tasa_ea_pct / 100, 1 / 12) - 1;
+    const cuota = r ? (P * r) / (1 - Math.pow(1 + r, -n)) : P / n;
+    return { cuota_mensual: Math.round(cuota), total_pagado: Math.round(cuota * n), intereses: Math.round(cuota * n - P), tasa_mensual_pct: Math.round(r * 10000) / 100 };
+  }
+  return { error: "Tipo de cálculo desconocido." };
+}
+
 const HERRAMIENTA_BUSQUEDA = {
   type: "web_search_20250305",
   name: "web_search",
@@ -116,15 +185,15 @@ function limpiarMensajes(lista) {
   return salida;
 }
 
-async function llamarClaude(apiKey, mensajes, conBusqueda) {
+async function llamarClaude(apiKey, mensajes, conBusqueda, memoria, recados) {
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
     body: JSON.stringify({
       model: process.env.CLAUDE_MODEL || MODELO_POR_DEFECTO,
       max_tokens: 900,
-      system: promptSistema(),
-      tools: conBusqueda ? [HERRAMIENTA_CLIMA, HERRAMIENTA_BUSQUEDA] : [HERRAMIENTA_CLIMA],
+      system: promptSistema(memoria, recados),
+      tools: conBusqueda ? [HERRAMIENTA_CLIMA, HERRAMIENTA_CALCULAR, HERRAMIENTA_BUSQUEDA] : [HERRAMIENTA_CLIMA, HERRAMIENTA_CALCULAR],
       messages: mensajes,
     }),
   });
@@ -139,6 +208,29 @@ function extraerExpresion(contenido) {
   const m = crudo.match(/\[\s*(feliz|riendo|gui[nñ]o|enamorada|sorprendida|sonrisa|pensando)\s*\]/i);
   const expresion = m ? m[1].toLowerCase().replace("ñ", "n") : "sonrisa";
   return { expresion, texto: crudo.replace(ETIQUETA, " ") };
+}
+
+function extraerMemoria(texto) {
+  const recordar = [], olvidar = [];
+  let olvidarTodo = false;
+  const limpio = String(texto || "")
+    .replace(/\[\s*recordar\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { recordar.push(d.trim()); return " "; })
+    .replace(/\[\s*olvidar_todo\s*\]/gi, () => { olvidarTodo = true; return " "; })
+    .replace(/\[\s*olvidar\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { olvidar.push(d.trim()); return " "; });
+  return { recordar, olvidar, olvidarTodo, limpio };
+}
+
+function extraerAcciones(texto) {
+  const recados = [], recadosHechos = [];
+  let foto = false, reporte = false, aprenderCara = null, olvidarCara = null;
+  const limpio = String(texto || "")
+    .replace(/\[\s*recado_hecho\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { recadosHechos.push(d.trim()); return " "; })
+    .replace(/\[\s*recado\s*:\s*([^\]]{2,200})\]/gi, (_, d) => { recados.push(d.trim()); return " "; })
+    .replace(/\[\s*tomar_foto\s*\]/gi, () => { foto = true; return " "; })
+    .replace(/\[\s*reporte\s*\]/gi, () => { reporte = true; return " "; })
+    .replace(/\[\s*aprender_cara\s*:\s*([^\]]{2,60})\]/gi, (_, d) => { aprenderCara = d.trim(); return " "; })
+    .replace(/\[\s*olvidar_cara\s*:\s*([^\]]{2,60})\]/gi, (_, d) => { olvidarCara = d.trim(); return " "; });
+  return { recados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, limpio };
 }
 
 function textoParaVoz(texto) {
@@ -161,6 +253,20 @@ export default async function handler(req, res) {
   let cuerpo = req.body;
   if (typeof cuerpo === "string") { try { cuerpo = JSON.parse(cuerpo || "{}"); } catch { cuerpo = {}; } }
   const mensajes = limpiarMensajes(cuerpo?.messages);
+  const recados = Array.isArray(cuerpo?.recados)
+    ? cuerpo.recados.filter((m) => typeof m === "string" && m.trim()).slice(-40).map((m) => m.trim().slice(0, 200))
+    : [];
+  // Foto de un documento: se adjunta a la última pregunta
+  if (typeof cuerpo?.imagen === "string" && cuerpo.imagen.length > 100 && cuerpo.imagen.length < 4_000_000) {
+    const ultimo = mensajes[mensajes.length - 1];
+    ultimo.content = [
+      { type: "image", source: { type: "base64", media_type: "image/jpeg", data: cuerpo.imagen.replace(/^data:image\/\w+;base64,/, "") } },
+      { type: "text", text: ultimo.content },
+    ];
+  }
+  const memoria = Array.isArray(cuerpo?.memoria)
+    ? cuerpo.memoria.filter((m) => typeof m === "string" && m.trim()).slice(-50).map((m) => m.trim().slice(0, 200))
+    : [];
   if (!mensajes.length || mensajes[mensajes.length - 1].role !== "user") return res.status(400).json({ error: "No llegó ninguna pregunta." });
 
   let conBusqueda = (process.env.WEB_SEARCH || "on").toLowerCase() !== "off";
@@ -168,13 +274,13 @@ export default async function handler(req, res) {
   try {
     // Ciclo de herramientas: Claude puede pedir el clima o buscar en la web antes de responder
     for (let vuelta = 0; vuelta < 5; vuelta++) {
-      let r = await llamarClaude(apiKey, mensajes, conBusqueda);
+      let r = await llamarClaude(apiKey, mensajes, conBusqueda, memoria, recados);
 
       // Si la búsqueda web no está habilitada en la organización, sigue sin ella
       if (!r.ok && conBusqueda && r.estado === 400 && /web.?search/i.test(JSON.stringify(r.datos))) {
         console.warn("Búsqueda web no disponible; sigo sin ella.");
         conBusqueda = false;
-        r = await llamarClaude(apiKey, mensajes, false);
+        r = await llamarClaude(apiKey, mensajes, false, memoria, recados);
       }
       if (!r.ok) {
         console.error("Error de Anthropic", r.estado, JSON.stringify(r.datos).slice(0, 500));
@@ -189,7 +295,9 @@ export default async function handler(req, res) {
         for (const bloque of content.filter((b) => b.type === "tool_use")) {
           let salida;
           try {
-            salida = bloque.name === "consultar_clima" ? await consultarClima(bloque.input) : { error: "Herramienta desconocida." };
+            salida = bloque.name === "consultar_clima" ? await consultarClima(bloque.input)
+              : bloque.name === "calcular" ? calcular(bloque.input)
+              : { error: "Herramienta desconocida." };
           } catch (e) {
             console.error("Error de herramienta", bloque.name, e);
             salida = { error: "No pude consultar el clima en este momento." };
@@ -206,8 +314,11 @@ export default async function handler(req, res) {
       }
 
       const { expresion, texto } = extraerExpresion(content);
-      const respuesta = textoParaVoz(texto);
-      return res.status(200).json({ reply: respuesta || "Perdón, no te entendí. ¿Me lo repites?", expresion });
+      const { recordar, olvidar, olvidarTodo, limpio } = extraerMemoria(texto);
+      const { recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara, limpio: limpio2 } = extraerAcciones(limpio);
+      const respuesta = textoParaVoz(limpio2);
+      return res.status(200).json({ reply: respuesta || "Perdón, no te entendí. ¿Me lo repites?", expresion, recordar, olvidar, olvidarTodo,
+        recados: nuevosRecados, recadosHechos, foto, reporte, aprenderCara, olvidarCara });
     }
     return res.status(200).json({ reply: "Uy, me enredé buscando eso. ¿Me lo preguntas de otra forma?" });
   } catch (e) {

@@ -7,6 +7,7 @@
 <title>Valery · Ana C de Seguros</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&display=swap" rel="stylesheet">
@@ -65,6 +66,7 @@
   .controles:hover, .controles:focus-within { opacity: 1; }
   .controles button { font: inherit; font-size: calc(var(--u) * 2); color: var(--hielo); background: transparent;
     border: 2px solid var(--niebla); border-radius: 999px; padding: calc(var(--u) * .8) calc(var(--u) * 2); cursor: pointer; }
+  .controles button[hidden] { display: none; }
   .controles button[aria-pressed="true"] { background: var(--cielo); border-color: var(--cielo); color: var(--placa-borde); }
   button:focus-visible, input:focus-visible { outline: 3px solid var(--alerta); outline-offset: 3px; }
 
@@ -112,6 +114,7 @@
 
 <div class="controles">
   <button id="btn-reunion" type="button" aria-pressed="false">Reunión</button>
+  <button id="btn-vibracion" type="button" aria-pressed="true">Vibración</button>
   <button id="btn-camara" type="button" aria-pressed="false">Cámara</button>
   <button id="btn-pantalla" type="button">Pantalla completa</button>
 </div>
@@ -131,8 +134,58 @@
   "use strict";
 
   // ---------- Configuración ----------
-  const SALUDO_INICIAL = "¡Hola! Soy Valery, la asistente de Ana Carolina, corredora de seguros. Toca mi cara cuando me necesites.";
-  const SALUDO_PRESENCIA = "¡Hola! Si necesitas algo, toca mi cara.";
+  // ---------- Saludos según la hora y fechas especiales ----------
+  function saludoHora() {
+    const h = new Date().getHours();
+    return h < 12 ? "¡Buenos días" : h < 19 ? "¡Buenas tardes" : "¡Buenas noches";
+  }
+  function fechaEspecial() {
+    const d = new Date(), md = String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    if (md === "12-24" || md === "12-25") return " ¡Feliz Navidad!";
+    if (md === "12-31") return " ¡Ya se va el año, qué emoción!";
+    if (md === "01-01") return " ¡Feliz año nuevo!";
+    if (md === "12-07") return " Hoy es noche de velitas.";
+    if (d.getMonth() === 4 && d.getDay() === 0 && d.getDate() >= 8 && d.getDate() <= 14) return " ¡Feliz día de la madre!";
+    if (d.getMonth() === 8 && d.getDay() === 6 && d.getDate() >= 15 && d.getDate() <= 21) return " ¡Feliz día del amor y la amistad!";
+    return "";
+  }
+  const saludoInicial = () => `${saludoHora()}! Soy Valery, la asistente de Ana Carolina, corredora de seguros.${fechaEspecial()} Toca mi cara cuando me necesites.`;
+  const saludoPresencia = () => `${saludoHora()}! Si necesitas algo, toca mi cara.${fechaEspecial()}`;
+
+  // ---------- Memoria de largo plazo (guardada solo en este dispositivo) ----------
+  // ---------- Libreta de recados (guardada en este dispositivo) ----------
+  function leerRecados() { try { return JSON.parse(localStorage.getItem("valeryRecados") || "[]"); } catch { return []; } }
+  function guardarRecados(r) {
+    const limite = Date.now() - 30 * 86400000; // los atendidos se guardan 30 días para el reporte semanal
+    r = r.filter(x => !x.hecho || (x.hechoEn || 0) > limite).slice(-100);
+    try { localStorage.setItem("valeryRecados", JSON.stringify(r)); } catch {}
+  }
+  function recadosPendientes() {
+    return leerRecados().filter(x => !x.hecho).map(x => `${x.texto} (anotado el ${new Date(x.creado).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })})`);
+  }
+  function actualizarRecados(d) {
+    const r = leerRecados();
+    for (const t of d.recados || []) if (!r.some(x => !x.hecho && x.texto.toLowerCase() === t.toLowerCase())) r.push({ texto: t, creado: Date.now(), hecho: false });
+    for (const h of d.recadosHechos || []) {
+      const claves = h.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      const x = r.find(x => !x.hecho && claves.length && claves.every(k => x.texto.toLowerCase().includes(k)))
+        || r.find(x => !x.hecho && claves.some(k => x.texto.toLowerCase().includes(k)));
+      if (x) { x.hecho = true; x.hechoEn = Date.now(); }
+    }
+    guardarRecados(r);
+  }
+
+  function leerMemoria() { try { return JSON.parse(localStorage.getItem("valeryMemoria") || "[]"); } catch { return []; } }
+  function actualizarMemoria(d) {
+    let m = leerMemoria();
+    if (d.olvidarTodo) m = [];
+    for (const o of d.olvidar || []) {
+      const claves = o.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+      m = m.filter(x => !claves.length || !claves.every(k => x.toLowerCase().includes(k)));
+    }
+    for (const r of d.recordar || []) if (!m.some(x => x.toLowerCase() === r.toLowerCase())) m.push(r);
+    try { localStorage.setItem("valeryMemoria", JSON.stringify(m.slice(-50))); } catch {}
+  }
   const MINUTOS_REINICIO = 10;        // olvida la conversación tras este tiempo sin uso
   const SEGUNDOS_ENTRE_SALUDOS = 120; // no saludar por movimiento más seguido que esto
 
@@ -169,9 +222,30 @@
   const MAPA_CARAS = { dormido: "dormida", reposo: "sonrisa", escuchando: "escuchando", pensando: "pensando", hablando: "hablando",
     feliz: "feliz", guino: "guino", enamorada: "enamorada", riendo: "riendo", sorprendida: "sorprendida" };
   const EMOCIONES = ["feliz", "guino", "enamorada", "riendo", "sorprendida"];
+  // ---------- Vibración: "movimientos" que acompañan cada expresión ----------
+  const VIBRACIONES = {
+    riendo: [40, 60, 40, 60, 40, 60, 40],        // risita ji-ji-ji
+    enamorada: [60, 100, 120, 450, 60, 100, 120], // latido de corazón
+    escuchando: [25],                             // toque "te escucho"
+    sorprendida: [180],                           // sobresalto
+    feliz: [30, 60, 30],                          // saltico de alegría
+    guino: [20, 90, 60],                          // complicidad
+    despertar: [20, 140, 30, 110, 40, 80, 70],    // se despereza
+    aviso: [50, 120, 50, 120, 50],                // aviso discreto (correo o WhatsApp a futuro)
+  };
+  const puedeVibrar = "vibrate" in navigator;
+  let vibracionActiva = true;
+  try { vibracionActiva = localStorage.getItem("robotVibracion") !== "0"; } catch {}
+  function vibrar(nombre) {
+    if (!puedeVibrar || !vibracionActiva || !VIBRACIONES[nombre]) return;
+    try { navigator.vibrate(VIBRACIONES[nombre]); } catch {}
+  }
+
   let caraActual = "";
-  function estado(e) {
+  function estado(e, sinVibrar = false) {
+    const anterior = cuerpo.dataset.estado;
     cuerpo.dataset.estado = e;
+    if (!sinVibrar && e !== anterior && VIBRACIONES[e] && !(e === "escuchando" && reunion)) vibrar(e);
     const k = MAPA_CARAS[e] || "sonrisa";
     if (k !== caraActual) { caraActual = k; $("rostro").innerHTML = CARAS[k](); }
   }
@@ -376,19 +450,19 @@
   }
 
   // ---------- Agente Claude ----------
-  async function preguntar(p) {
+  async function preguntar(p, opciones = {}) {
     if (Date.now() - ultimoUso > MINUTOS_REINICIO * 60000) historial = [];
     ultimoUso = Date.now();
     historial.push({ role: "user", content: p });
     estado("pensando");
-    texto(p);
+    texto(opciones.mostrar || p, opciones.mostrar ? "tenue" : "");
     const avisoLento = setTimeout(() => { if (cuerpo.dataset.estado === "pensando") texto("Déjame averiguar eso…", "tenue"); }, 4000);
 
     try {
       const r = await fetch("/api/chat", {
         method: "POST",
         headers: { "content-type": "application/json", "x-robot-pin": pin },
-        body: JSON.stringify({ messages: historial.slice(-20) })
+        body: JSON.stringify({ messages: historial.slice(-20), memoria: leerMemoria(), recados: recadosPendientes(), imagen: opciones.imagen })
       });
       const datos = await r.json().catch(() => ({}));
       clearTimeout(avisoLento);
@@ -400,8 +474,14 @@
         return;
       }
       historial.push({ role: "assistant", content: datos.reply });
+      actualizarMemoria(datos);
+      actualizarRecados(datos);
       ultimoUso = Date.now();
       await decir(datos.reply, datos.expresion);
+      if (datos.aprenderCara) await aprenderCara(datos.aprenderCara);
+      if (datos.olvidarCara) olvidarCara(datos.olvidarCara);
+      if (datos.foto) await tomarFoto();
+      if (datos.reporte) await enviarReporte(true);
     } catch {
       clearTimeout(avisoLento);
       historial.pop();
@@ -413,6 +493,7 @@
   // ---------- Toque en la cara ----------
   $("cara").addEventListener("click", () => {
     if (!activo || reunion) return;
+    if (cuerpo.dataset.estado === "dormido" && quizasResumenDelDia()) return;
     const e = cuerpo.dataset.estado;
     if (e === "escuchando" && reconocedor) { reconocedor.stop(); return; }
     if (e === "pensando") return;
@@ -431,7 +512,7 @@
 
   async function encenderCamara() {
     try {
-      flujo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 320, height: 240 }, audio: false });
+      flujo = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
       video.srcObject = flujo;
       await video.play();
       camaraActiva = true;
@@ -469,9 +550,10 @@
         const llegoAlguien = Date.now() - quietoDesde > 15000;
         if (llegoAlguien && !reunion && cuerpo.dataset.estado === "reposo" && Date.now() - ultimoSaludo > SEGUNDOS_ENTRE_SALUDOS * 1000) {
           ultimoSaludo = Date.now();
-          decir(SALUDO_PRESENCIA, "feliz");
+          saludarAlLlegar();
         }
         quietoDesde = Date.now();
+        if (hayCaras() && !reunion && ["reposo", "dormido"].includes(cuerpo.dataset.estado) && Date.now() - ultimoIntentoCara > 5000) reconocerYSaludar();
       }
     }
     anterior = gris;
@@ -596,6 +678,18 @@
     iniciarReunion();
   });
 
+  // Botón de vibración (se oculta donde no hay vibrador, como en el PC)
+  const btnVibracion = $("btn-vibracion");
+  if (!puedeVibrar) btnVibracion.hidden = true;
+  btnVibracion.setAttribute("aria-pressed", String(vibracionActiva));
+  btnVibracion.addEventListener("click", (e) => {
+    e.stopPropagation();
+    vibracionActiva = !vibracionActiva;
+    btnVibracion.setAttribute("aria-pressed", String(vibracionActiva));
+    try { localStorage.setItem("robotVibracion", vibracionActiva ? "1" : "0"); } catch {}
+    if (vibracionActiva) vibrar("feliz");
+  });
+
   // ---------- Pantalla completa y pantalla siempre encendida ----------
   $("btn-pantalla").addEventListener("click", (e) => {
     e.stopPropagation();
@@ -609,6 +703,223 @@
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") mantenerEncendida(); });
 
   estado("dormido");
+
+  // ---------- Leer documentos con la cámara ----------
+  function detenerSeguimiento() {
+    clearInterval(bucle);
+    if (flujo) flujo.getTracks().forEach(t => t.stop());
+    flujo = null; anterior = null; camaraActiva = false;
+  }
+  async function tomarFoto() {
+    const estabaActiva = camaraActiva;
+    if (estabaActiva) detenerSeguimiento();
+    let flujoFoto;
+    try {
+      flujoFoto = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+    } catch {
+      texto("No pude usar la cámara para ver el documento. Revisa el permiso.", "error");
+      if (estabaActiva) encenderCamara();
+      return;
+    }
+    const v = document.createElement("video");
+    v.muted = true; v.playsInline = true; v.srcObject = flujoFoto;
+    try { await v.play(); } catch {}
+    estado("escuchando", true);
+    for (const n of [3, 2, 1]) { texto(`Pon el documento frente a mi cámara… ${n}`, "tenue"); await esperar(1000); }
+    const lado = 1600, f = Math.min(1, lado / Math.max(v.videoWidth || 1, v.videoHeight || 1));
+    const lienzoFoto = document.createElement("canvas");
+    lienzoFoto.width = Math.round((v.videoWidth || 1280) * f); lienzoFoto.height = Math.round((v.videoHeight || 720) * f);
+    lienzoFoto.getContext("2d").drawImage(v, 0, 0, lienzoFoto.width, lienzoFoto.height);
+    const imagen = lienzoFoto.toDataURL("image/jpeg", .85).split(",")[1];
+    flujoFoto.getTracks().forEach(t => t.stop());
+    vibrar("guino");
+    if (estabaActiva) encenderCamara();
+    await preguntar("Te muestro el documento en la foto. Resúmeme lo importante.", { imagen, mostrar: "Leyendo el documento…" });
+  }
+
+  // ---------- Resumen del día (la primera vez que Caro la despierta en la mañana) ----------
+  function quizasResumenDelDia() {
+    const ahora = new Date(), h = ahora.getHours();
+    if (h < 6 || h >= 12) return false;
+    const clave = "valeryResumen:" + ahora.toDateString();
+    try { if (localStorage.getItem(clave)) return false; localStorage.setItem(clave, "1"); } catch { return false; }
+    estado("feliz");
+    preguntar("[Instrucción interna, no la menciones] Caro acaba de llegar y es la primera vez que la ves hoy. Dale el resumen del día en máximo cuatro frases: saludo cariñoso con la fecha, el clima de hoy, los recados pendientes y algún pendiente que recuerdes. Si no hay recados, dilo con alegría.",
+      { mostrar: "Preparando tu resumen del día…" });
+    return true;
+  }
+
+  // ---------- Reporte semanal (viernes en la tarde, o cuando Caro lo pida) ----------
+  function claveSemana(d = new Date()) {
+    const ini = new Date(d.getFullYear(), 0, 1);
+    return d.getFullYear() + "-S" + Math.ceil(((d - ini) / 86400000 + ini.getDay() + 1) / 7);
+  }
+  let ultimoIntentoReporte = 0;
+  async function enviarReporte(hablar) {
+    ultimoIntentoReporte = Date.now();
+    const hace7 = Date.now() - 7 * 86400000;
+    const recados = leerRecados().filter(x => !x.hecho || (x.hechoEn || 0) > hace7)
+      .map(x => ({ texto: x.texto, hecho: x.hecho, creado: new Date(x.creado).toLocaleDateString("es-CO") }));
+    const hoy = new Date(), lunes = new Date(hoy); lunes.setDate(hoy.getDate() - ((hoy.getDay() + 6) % 7));
+    const semana = `Semana del ${lunes.toLocaleDateString("es-CO", { day: "numeric", month: "long" })} al ${hoy.toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}`;
+    try {
+      const r = await fetch("/api/reporte", { method: "POST", headers: { "content-type": "application/json", "x-robot-pin": pin },
+        body: JSON.stringify({ recados, memoria: leerMemoria(), semana }) });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw Object.assign(new Error(d.error || "Error"), { codigo: d.codigo });
+      try { localStorage.setItem("valeryReporte:" + claveSemana(), "1"); } catch {}
+      if (hablar) await decir("Listo, jefa, te envié el reporte de la semana al correo.", "feliz");
+    } catch (e) {
+      if (hablar) await decir(e.codigo === "config" ? "Todavía no tengo configurado el correo para enviar el reporte." : "No pude enviar el reporte ahora. Lo intento más tarde.");
+    }
+  }
+  setInterval(() => {
+    const d = new Date();
+    if (!activo || reunion || d.getDay() !== 5 || d.getHours() < 16) return;
+    try { if (localStorage.getItem("valeryReporte:" + claveSemana())) return; } catch { return; }
+    if (Date.now() - ultimoIntentoReporte < 3600000) return;
+    enviarReporte(false);
+  }, 600000);
+
+  // ---------- Reconocer caras de la familia (todo se procesa y guarda en este dispositivo) ----------
+  const FACE_CDN = "https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.15";
+  let promesaFace = null, ultimoIntentoCara = 0, reconociendo = false;
+  function cargarFaceApi() {
+    if (promesaFace) return promesaFace;
+    promesaFace = new Promise((ok, mal) => {
+      const s = document.createElement("script");
+      s.src = FACE_CDN + "/dist/face-api.js";
+      s.onload = async () => {
+        try {
+          const m = FACE_CDN + "/model/";
+          await faceapi.nets.tinyFaceDetector.loadFromUri(m);
+          await faceapi.nets.faceLandmark68TinyNet.loadFromUri(m);
+          await faceapi.nets.faceRecognitionNet.loadFromUri(m);
+          ok();
+        } catch (e) { promesaFace = null; mal(e); }
+      };
+      s.onerror = () => { promesaFace = null; mal(new Error("No cargó el reconocimiento de caras")); };
+      document.head.appendChild(s);
+    });
+    return promesaFace;
+  }
+  function leerCaras() { try { return JSON.parse(localStorage.getItem("valeryCaras") || "{}"); } catch { return {}; } }
+  function guardarCaras(c) { try { localStorage.setItem("valeryCaras", JSON.stringify(c)); } catch {} }
+  const hayCaras = () => Object.keys(leerCaras()).length > 0;
+  async function descriptorActual() {
+    if (!camaraActiva || video.readyState < 2) return null;
+    const r = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions({ inputSize: 320, scoreThreshold: .5 }))
+      .withFaceLandmarks(true).withFaceDescriptor();
+    return r ? Array.from(r.descriptor) : null;
+  }
+  function quienEs(d) {
+    let mejor = null, distMin = .5; // menor distancia = más parecido; 0,5 es un umbral prudente
+    for (const [nombre, muestras] of Object.entries(leerCaras())) {
+      for (const m of muestras) {
+        let s = 0; for (let i = 0; i < d.length; i++) { const x = d[i] - m[i]; s += x * x; }
+        const dist = Math.sqrt(s);
+        if (dist < distMin) { distMin = dist; mejor = nombre; }
+      }
+    }
+    return mejor;
+  }
+  async function aprenderCara(nombre) {
+    nombre = nombre.trim().replace(/^\w/, (l) => l.toUpperCase());
+    if (!camaraActiva) await encenderCamara();
+    if (!camaraActiva) return;
+    estado("pensando", true); texto("Preparándome para aprender caras…", "tenue");
+    try { await cargarFaceApi(); } catch { await decir("No pude cargar el reconocimiento de caras. Revisa el internet e intentemos otra vez."); return; }
+    estado("escuchando", true);
+    const muestras = [];
+    for (let i = 0; i < 12 && muestras.length < 6; i++) {
+      texto(`Mírame de frente, ${nombre}… ${muestras.length + 1} de 6`, "tenue");
+      try { const d = await descriptorActual(); if (d) muestras.push(d.map((x) => Math.round(x * 10000) / 10000)); } catch {}
+      await esperar(500);
+    }
+    if (muestras.length < 3) { await decir(`No te vi bien, ${nombre}. Acércate un poquito, con buena luz, e intentémoslo otra vez.`); return; }
+    const caras = leerCaras(); caras[nombre] = muestras; guardarCaras(caras);
+    marcarSaludo(nombre);
+    await decir(`¡Listo! Ya me aprendí tu cara, ${nombre}. La próxima vez que te vea te voy a saludar.`, "feliz");
+  }
+  function olvidarCara(nombre) {
+    const caras = leerCaras(), clave = Object.keys(caras).find((k) => k.toLowerCase() === nombre.trim().toLowerCase());
+    if (clave) { delete caras[clave]; guardarCaras(caras); }
+  }
+  function marcarSaludo(nombre) { try { localStorage.setItem("valerySaludoCara:" + nombre, String(Date.now())); } catch {} }
+  function saludadoHace(nombre) { try { return Date.now() - Number(localStorage.getItem("valerySaludoCara:" + nombre) || 0); } catch { return 0; } }
+  async function reconocer() {
+    if (reconociendo || !hayCaras()) return null;
+    reconociendo = true; ultimoIntentoCara = Date.now();
+    try { await cargarFaceApi(); const d = await descriptorActual(); return d ? quienEs(d) : null; }
+    catch { return null; }
+    finally { reconociendo = false; }
+  }
+  async function saludarConocido(nombre) {
+    marcarSaludo(nombre); ultimoSaludo = Date.now();
+    if (cuerpo.dataset.estado === "dormido") reposo();
+    await preguntar(`[Instrucción interna, no la menciones] Acabas de reconocer la cara de ${nombre} frente a ti. Salúdalo por su nombre con mucho cariño, en una o dos frases, según lo que sabes de esa persona.`,
+      { mostrar: `¡Hola, ${nombre}!` });
+  }
+  async function reconocerYSaludar() {
+    const nombre = await reconocer();
+    if (nombre && saludadoHace(nombre) > 4 * 3600000 && ["reposo", "dormido"].includes(cuerpo.dataset.estado)) saludarConocido(nombre);
+  }
+  async function saludarAlLlegar() {
+    const nombre = hayCaras() ? await reconocer() : null;
+    if (nombre && saludadoHace(nombre) > 4 * 3600000) saludarConocido(nombre);
+    else decir(saludoPresencia(), "feliz");
+  }
+
+  // ---------- Un recuerdo de Camilo al día ----------
+  setInterval(() => {
+    if (!activo || reunion || cuerpo.dataset.estado !== "reposo") return;
+    if (!camaraActiva || Date.now() - quietoDesde > 180000 || Date.now() - ultimoUso < 10 * 60000) return;
+    const hoy = new Date(), clave = "valeryCamilo:" + hoy.toDateString();
+    let hora;
+    try {
+      if (localStorage.getItem(clave) === "hecho") return;
+      hora = Number(localStorage.getItem(clave));
+      if (!hora) { hora = 9.5 + Math.random() * 7; localStorage.setItem(clave, String(hora)); } // una hora al azar entre 9:30 a. m. y 4:30 p. m.
+    } catch { return; }
+    if (hoy.getHours() + hoy.getMinutes() / 60 < hora) return;
+    try { localStorage.setItem(clave, "hecho"); } catch {}
+    preguntar("[Instrucción interna, no la menciones] Es un buen momento para recordarle a Caro, en una o dos frases y con tu estilo, algo bonito sobre Camilo, su esposo. Varía el mensaje cada día.",
+      { mostrar: "…" });
+  }, 60000);
+
+  // ---------- Vida propia ----------
+  // Microgestos: de vez en cuando, en reposo, sonríe o guiña un instante (sin vibrar ni hablar)
+  (function microgestos() {
+    setTimeout(() => {
+      if (activo && !reunion && cuerpo.dataset.estado === "reposo") {
+        const g = Math.random() < .75 ? "feliz" : "guino";
+        estado(g, true);
+        setTimeout(() => { if (cuerpo.dataset.estado === g) estado("reposo", true); }, 1300);
+      }
+      microgestos();
+    }, 25000 + Math.random() * 35000);
+  })();
+
+  // Comentarios espontáneos según la hora, una vez por franja al día, solo si hay alguien cerca
+  const COMENTARIOS = [
+    { desde: 8, hasta: 10, frases: ["¿Ya te tomaste el tintico, jefa?", "Arrancamos el día con toda, Caro. Aquí estoy si me necesitas."] },
+    { desde: 10.5, hasta: 11.5, frases: ["Pausa activa: estírate un poquito y toma agua, que el calor no perdona."] },
+    { desde: 12, hasta: 13.5, frases: ["¿Ya almorzaste, Caro? No te me vayas a quedar sin comer.", "Ajá, ya es hora del almuerzo. ¡Buen provecho!"] },
+    { desde: 15, hasta: 16, frases: ["Hora de una pausa activa: mueve el cuello, estira los brazos y toma agüita.", "¿Un cafecito para la tarde, jefa?"] },
+    { desde: 17.5, hasta: 18.5, frases: ["Ya casi es hora de irse, jefa. ¿Dejamos todo listo para mañana?"] },
+  ];
+  setInterval(() => {
+    if (!activo || reunion || cuerpo.dataset.estado !== "reposo") return;
+    if (!camaraActiva || Date.now() - quietoDesde > 180000) return; // nadie cerca
+    if (Date.now() - ultimoUso < 5 * 60000) return;                 // no interrumpir una conversación reciente
+    const ahora = new Date(), h = ahora.getHours() + ahora.getMinutes() / 60;
+    const i = COMENTARIOS.findIndex(c => h >= c.desde && h < c.hasta);
+    if (i < 0) return;
+    const clave = "valeryComentario:" + ahora.toDateString() + ":" + i;
+    try { if (localStorage.getItem(clave)) return; localStorage.setItem(clave, "1"); } catch { return; }
+    const frases = COMENTARIOS[i].frases;
+    decir(frases[Math.floor(Math.random() * frases.length)], "feliz");
+  }, 60000);
 
   // ---------- PIN y arranque ----------
   function pedirPin(mensaje = "") {
@@ -631,12 +942,17 @@
   let primeraVez = true;
   async function despertar() {
     activo = true;
+    if (hayCaras()) cargarFaceApi().catch(() => {});
+    vibrar("despertar");
     mantenerEncendida();
     let usarCamara = true;
     try { usarCamara = localStorage.getItem("robotCamara") !== "0"; } catch {}
     if (usarCamara && !camaraActiva) encenderCamara();
     reposo();
-    if (primeraVez) { primeraVez = false; ultimoSaludo = Date.now(); decir(SALUDO_INICIAL, "feliz"); }
+    if (primeraVez) {
+      primeraVez = false; ultimoSaludo = Date.now();
+      if (!quizasResumenDelDia()) decir(saludoInicial(), "feliz");
+    }
   }
 
   setInterval(() => {
